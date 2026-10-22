@@ -16,7 +16,8 @@ let curIdx = 0;
 let timerId = null;
 let left = 0;
 let phase = "idle";      // idle | typing | answering | scoring | result
-let recog = null, recogOn = false;
+let recActive = false;   // 真录音中
+let recBusy = false;     // 识别请求中
 
 /* 追问状态 */
 let followups = {};    // 追问语料：{ "S1": [{point,kw,ask}] }
@@ -439,7 +440,7 @@ function localScore(s, ans, timeout) {
 function getCfg() {
   try {
     const c = JSON.parse(localStorage.getItem("mvp_cfg") || "null");
-    if (c && c.key) return c;
+    if (c && c.key) return { asr: (window.MVP_BUILTIN_CFG || {}).asr || "", ...c };
   } catch {}
   return window.MVP_BUILTIN_CFG || null;
 }
@@ -534,12 +535,12 @@ function showResult(r) {
   $("result").classList.remove("hidden");
 }
 
-/* ---------- 语音 ---------- */
+/* ---------- 语音（真录音 + 腾讯云一句话识别） ---------- */
 let recStart = 0, recTick = null;
 function uiRecStart() {
   $("rec-bar").classList.remove("hidden");
   $("btn-mic").classList.add("rec");
-  $("answer").placeholder = "正在听你说…";
+  $("answer").placeholder = "正在录音，说完点「完成」…";
   recStart = Date.now();
   $("rec-time").textContent = "0:00";
   clearInterval(recTick);
@@ -562,30 +563,98 @@ function showRecErr(msg) {
   clearTimeout(recErrT);
   recErrT = setTimeout(() => el.classList.add("hidden"), 5000);
 }
-function setupRecog() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return;   // 不支持时保留按钮，点击会提示
-  recog = new SR();
-  recog.lang = "zh-CN";
-  recog.interimResults = false;
-  recog.onresult = (e) => {
-    const t = e.results[0][0].transcript;
-    $("answer").value = ($("answer").value + t).slice(0, 500);
-  };
-  recog.onend = () => { recogOn = false; uiRecStop(); };
-  recog.onerror = (e) => {
-    recogOn = false; uiRecStop();
-    const map = {
-      "not-allowed": "麦克风权限被拒：请允许麦克风后再点「说话」，或直接打字",
-      "service-not-allowed": "当前浏览器禁用了语音识别服务，请直接打字",
-      "network": "这个浏览器的语音识别依赖在线服务，连不上——请直接打字",
-      "audio-capture": "没找到麦克风设备，请检查后再试",
-      "no-speech": "没听到声音，请靠近话筒再说一次",
-    };
-    showRecErr(map[e.error] || ("语音识别失败（" + e.error + "），请直接打字"));
-  };
+
+let mediaStream = null, audioCtx = null, procNode = null, recChunks = [];
+
+async function startRec() {
+  if (recActive || recBusy) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showRecErr("此环境不支持录音（需在 https 页面或微信新版中打开），请直接打字"); return;
+  }
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    showRecErr("麦克风权限被拒：请允许麦克风后再点「说话」，或直接打字"); return;
+  }
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = audioCtx.createMediaStreamSource(mediaStream);
+    procNode = audioCtx.createScriptProcessor(4096, 1, 1);
+    recChunks = [];
+    procNode.onaudioprocess = (e) => recChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    src.connect(procNode);
+    procNode.connect(audioCtx.destination);
+  } catch (e) {
+    mediaStream.getTracks().forEach((t) => t.stop());
+    mediaStream = null;
+    showRecErr("录音初始化失败，请刷新页面后再试，或直接打字"); return;
+  }
+  recActive = true;
+  uiRecStart();
 }
-function stopRecog() { if (recog && recogOn) recog.stop(); }
+
+function stopRecog() { if (recActive) finishRec(); }
+
+async function finishRec() {
+  if (!recActive) return;
+  recActive = false;
+  const chunks = recChunks; recChunks = [];
+  const rate = audioCtx ? audioCtx.sampleRate : 48000;
+  try { procNode && procNode.disconnect(); } catch {}
+  try { mediaStream && mediaStream.getTracks().forEach((t) => t.stop()); } catch {}
+  try { audioCtx && audioCtx.close(); } catch {}
+  audioCtx = null; procNode = null; mediaStream = null;
+  uiRecStop();
+  if (!chunks.length) { showRecErr("没录到声音，请再试一次"); return; }
+  const asr = (getCfg() || {}).asr ||
+    ((location.hostname === "localhost" || location.hostname === "127.0.0.1") ? "/api/asr" : "");
+  if (!asr) { showRecErr("语音转文字服务还没配置，请直接打字"); return; }
+  recBusy = true;
+  $("answer").placeholder = "识别中…";
+  try {
+    const res = await fetch(asr, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audio: b64encode(encodeWav16k(chunks, rate)), format: "wav" }),
+    });
+    const data = await res.json();
+    if (data.text) $("answer").value = ($("answer").value + data.text).slice(0, 500);
+    else showRecErr("没听清，请再说一次或直接打字");
+  } catch (e) {
+    showRecErr("识别服务连不上，请直接打字");
+  }
+  $("answer").placeholder = "开口回答他…（也可打字）";
+  recBusy = false;
+}
+
+/* Float32 采样 → 16kHz 16bit 单声道 WAV */
+function encodeWav16k(chunks, srcRate) {
+  let len = 0; chunks.forEach((c) => (len += c.length));
+  const all = new Float32Array(len);
+  let off = 0; chunks.forEach((c) => { all.set(c, off); off += c.length; });
+  const ratio = srcRate / 16000;
+  const outLen = Math.max(1, Math.floor(len / ratio));
+  const buf = new ArrayBuffer(44 + outLen * 2);
+  const v = new DataView(buf);
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, "RIFF"); v.setUint32(4, 36 + outLen * 2, true); ws(8, "WAVE"); ws(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 16000, true); v.setUint32(28, 32000, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  ws(36, "data"); v.setUint32(40, outLen * 2, true);
+  const pcm = new Int16Array(buf, 44);
+  for (let i = 0; i < outLen; i++) {
+    const s = all[Math.floor(i * ratio)];
+    pcm[i] = Math.max(-32768, Math.min(32767, Math.round(s * 32767)));
+  }
+  return new Uint8Array(buf);
+}
+
+function b64encode(bytes) {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
 
 /* 嘴替语音输入：与对练页同一套机制，写入 #mp-input */
 let recogMp = null, recogMpOn = false;
@@ -651,9 +720,7 @@ function bindGlobal() {
   });
   $("answer").addEventListener("input", () => { lastType = Date.now(); });
   $("btn-mic").addEventListener("click", () => {
-    if (!recog) { showRecErr("此浏览器不支持语音输入，请直接打字（电脑端可用 Chrome/Edge）"); return; }
-    if (recogOn) { stopRecog(); }
-    else { try { recog.start(); recogOn = true; uiRecStart(); } catch { showRecErr("录音启动失败，请刷新页面后再试，或直接打字"); } }
+    if (recActive) stopRecog(); else startRec();
   });
   $("btn-rec-done").addEventListener("click", () => stopRecog());
   $("btn-retry").addEventListener("click", () => {
@@ -675,7 +742,6 @@ function bindGlobal() {
   $("btn-settings").addEventListener("click", () => $("settings").classList.remove("hidden"));
   $("cfg-close").addEventListener("click", () => $("settings").classList.add("hidden"));
   $("cfg-save").addEventListener("click", saveCfg);
-  setupRecog();
   setupRecogMp();
 }
 

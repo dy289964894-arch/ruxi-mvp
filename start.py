@@ -33,6 +33,9 @@ def load_env():
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
+        if self.path == "/api/asr":
+            self._asr()
+            return
         if self.path != "/api/chat/completions":
             self.send_error(404)
             return
@@ -58,6 +61,36 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._relay(e.code, e.read())
         except Exception as e:
             self.send_error(502, str(e))
+
+    def _asr(self):
+        if not (ENV.get("TENCENT_SECRET_ID") and ENV.get("TENCENT_SECRET_KEY")):
+            self.send_error(503, "server has no TENCENT_SECRET_ID/KEY")
+            return
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0 or length > MAX_BODY:
+            self.send_error(413)
+            return
+        try:
+            req = json.loads(self.rfile.read(length).decode("utf-8"))
+        except Exception:
+            self.send_error(400, "bad json")
+            return
+        import base64 as b64
+        import scf_asr_handler
+        os.environ["TENCENT_SECRET_ID"] = ENV["TENCENT_SECRET_ID"]
+        os.environ["TENCENT_SECRET_KEY"] = ENV["TENCENT_SECRET_KEY"]
+        audio_b64 = req.get("audio") or ""
+        try:
+            raw = b64.b64decode(audio_b64)
+        except Exception:
+            self.send_error(400, "bad base64")
+            return
+        text, err = scf_asr_handler._call_asr(audio_b64, len(raw), req.get("format") or "wav")
+        if err:
+            self.send_error(502, err)
+            return
+        data = json.dumps({"text": text}, ensure_ascii=False).encode("utf-8")
+        self._relay(200, data)
 
     def _relay(self, status, data):
         self.send_response(status)
