@@ -44,7 +44,7 @@ async function init() {
   applyTheme();
   let ok = true;
   try {
-    scenes = await (await fetch("scenes.json?v=3")).json();
+    scenes = await (await fetch("scenes.json?v=4")).json();
   } catch (e) {
     ok = false;
     $("scene-list").innerHTML =
