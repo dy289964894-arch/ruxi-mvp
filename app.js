@@ -29,9 +29,19 @@ let curExpr = "calm";  // 当前表情（表情实时化）
 let lastType = 0;      // 最后一次输入时间
 let idleId = null;     // 发呆监视器
 
+/* ---------- 外观主题 ---------- */
+function getTheme() { return localStorage.getItem("mvp_theme") || "light"; }
+function applyTheme() {
+  const t = getTheme();
+  document.body.classList.toggle("light", t === "light");
+  const b = $("me-theme");
+  if (b) b.innerHTML = `外观：${t === "light" ? "浅色" : "深色"}<span>›</span>`;
+}
+
 /* ---------- 启动 ---------- */
 init();
 async function init() {
+  applyTheme();
   let ok = true;
   try {
     scenes = await (await fetch("scenes.json?v=3")).json();
@@ -540,6 +550,22 @@ function setupRecog() {
 }
 function stopRecog() { if (recog && recogOn) recog.stop(); }
 
+/* 嘴替语音输入：与对练页同一套机制，写入 #mp-input */
+let recogMp = null, recogMpOn = false;
+function setupRecogMp() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { $("btn-mp-mic").style.display = "none"; return; }
+  recogMp = new SR();
+  recogMp.lang = "zh-CN";
+  recogMp.interimResults = false;
+  recogMp.onresult = (e) => {
+    const t = e.results[0][0].transcript;
+    $("mp-input").value = ($("mp-input").value + t).slice(0, 500);
+  };
+  recogMp.onend = () => { recogMpOn = false; $("btn-mp-mic").classList.remove("rec"); };
+  recogMp.onerror = () => { recogMpOn = false; $("btn-mp-mic").classList.remove("rec"); };
+}
+
 /* ---------- 事件 ---------- */
 function bindGlobal() {
   $("btn-login").addEventListener("click", doLogin);
@@ -549,6 +575,10 @@ function bindGlobal() {
   document.querySelectorAll("#tabbar button").forEach((b) =>
     b.addEventListener("click", () => showTab(b.dataset.tab)));
   $("me-settings").addEventListener("click", () => $("settings").classList.remove("hidden"));
+  $("me-theme").addEventListener("click", () => {
+    localStorage.setItem("mvp_theme", getTheme() === "light" ? "dark" : "light");
+    applyTheme();
+  });
   $("me-about").addEventListener("click", () =>
     alert("入戏 · 职场情景对练 v0.2\n本地演示版：场景教研 + 模拟对练 + 四维评分。\n正式版将支持微信登录、云端同步、彩排模式。"));
   $("me-clear").addEventListener("click", () => {
@@ -608,6 +638,7 @@ function bindGlobal() {
   $("cfg-close").addEventListener("click", () => $("settings").classList.add("hidden"));
   $("cfg-save").addEventListener("click", saveCfg);
   setupRecog();
+  setupRecogMp();
 }
 
 /* ---------- 设置 ---------- */
@@ -631,6 +662,11 @@ function saveCfg() {
 
 /* ---------- 嘴替 / 一键三方案 ---------- */
 $("mp-go").addEventListener("click", mpGo);
+$("btn-mp-mic").addEventListener("click", () => {
+  if (!recogMp) return;
+  if (recogMpOn) { recogMp.stop(); recogMpOn = false; }
+  else { try { recogMp.start(); recogMpOn = true; $("btn-mp-mic").classList.add("rec"); } catch {} }
+});
 
 /* 截图上传：压缩到最长边 1024 的 JPEG，供多模态模型读图 */
 let mpImg = null;

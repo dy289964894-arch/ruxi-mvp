@@ -272,3 +272,58 @@ button { font-family: inherit; cursor: pointer; }
 #mp-out .stg { padding-right: 64px; }
 .mp-match { color: var(--gold); font-size: 13px; letter-spacing: 1px; margin-bottom: 10px; }
 #mp-practice { margin-top: 6px; background: none; border: 1px solid var(--gold); color: var(--gold); }
+
+/* ---------- 嘴替语音按钮 ---------- */
+#btn-mp-mic { width: 100%; margin-top: 10px; height: 42px; border-radius: 12px;
+  border: 1px solid #3a3a3a; background: rgba(20,20,24,.85); color: var(--ink);
+  font-size: 14px; letter-spacing: 2px; }
+#btn-mp-mic.rec { background: var(--seal); border-color: var(--seal); color: #fff;
+  animation: pulse 1.2s infinite; }
+
+/* ---------- 浅色主题（默认） ----------
+   对练舞台（#play 照片区及其浮层）保持深色，其余页面提亮 */
+body.light {
+  --ink: #2b2620;
+  --ink-dim: #8a8071;
+  --gold: #a87908;
+  --glass: rgba(255, 255, 255, .8);
+  background: #f2ede3;
+}
+body.light #phone { background: #f5f1e8; box-shadow: 0 0 40px rgba(90,80,60,.25); }
+
+body.light #home, body.light #progress, body.light #me, body.light #mouthpiece {
+  background: radial-gradient(120% 60% at 50% 0%, #faf6ec 0%, #f2ede3 70%); }
+body.light #btn-settings { border-color: #d6cdb8; }
+
+body.light .scene-item { border-color: #e2d9c4; }
+body.light .scene-item .veil {
+  background: linear-gradient(90deg, rgba(250,247,238,.96) 22%, rgba(250,247,238,.66) 62%, rgba(250,247,238,.1) 90%); }
+body.light .scene-item .txt b { text-shadow: 0 1px 4px rgba(255,255,255,.85); }
+body.light .scene-item .txt span { text-shadow: none; }
+body.light .scene-item .diff { text-shadow: none; }
+
+body.light #login { background: radial-gradient(120% 70% at 50% 0%, #faf4e6 0%, #f2ede3 68%); }
+body.light #login input { background: #fff; border-color: #d6cdb8; color: var(--ink); }
+
+body.light #tabbar { background: rgba(255,255,255,.94); border-top-color: #e5ddca; }
+
+body.light #stat-cards div, body.light .hist-item, body.light #me-stats,
+body.light .menu button, body.light .stg, body.light .rd, body.light #dims div,
+body.light #feedback { background: #fffdf8; border-color: #e6ddc8; }
+body.light #result { background: rgba(60,50,35,.45); }
+body.light #result-card { background: #f7f2e8; }
+body.light #dim-bars .bar { background: #e8e0cd; }
+body.light #btn-retry { border-color: #c9bda0; }
+body.light .stg .mp-copy { border-color: #c9bda0; }
+
+body.light #settings-card { background: #faf6ec; border-color: #ddd2b8; }
+body.light #settings-card input { background: #fff; border-color: #d6cdb8; color: var(--ink); }
+body.light #settings-card .row button { border-color: #c9bda0; }
+
+body.light #mp-input, body.light #mp-extra, body.light #mp-opts select {
+  background: #fff; border-color: #d6cdb8; color: var(--ink); }
+body.light #mp-shot-label { border-color: #c9bda0; }
+body.light #mp-shot-view img { border-color: #d6cdb8; }
+body.light #mp-shot-x { background: #d9d0ba; color: #5c5340; }
+body.light #btn-mp-mic { background: #fff; border-color: #d6cdb8; }
+body.light #btn-mp-mic.rec { background: var(--seal); border-color: var(--seal); color: #fff; }

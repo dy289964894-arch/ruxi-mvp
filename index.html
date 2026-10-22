@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>入戏 · 职场情景对练</title>
-<link rel="stylesheet" href="style.css?v=21">
+<link rel="stylesheet" href="style.css?v=22">
 </head>
 <body>
 <div id="phone">
@@ -56,6 +56,7 @@
     </div>
     <div id="me-stats"></div>
     <div class="menu">
+      <button id="me-theme">外观：浅色<span>›</span></button>
       <button id="me-settings">大模型设置<span>›</span></button>
       <button id="me-about">关于入戏<span>›</span></button>
       <button id="me-clear">清空练习记录<span>›</span></button>
@@ -67,8 +68,9 @@
   <!-- 嘴替 -->
   <section id="mouthpiece" class="hidden">
     <header><h2>嘴替</h2></header>
-    <p class="mp-hint">把对方发来的原话粘进来，或上传聊天截图，给你三种回法。</p>
+    <p class="mp-hint">把对方发来的原话粘进来、语音输入，或上传聊天截图，给你三种回法。</p>
     <textarea id="mp-input" rows="4" placeholder="比如：这个方案今晚必须给我"></textarea>
+    <button id="btn-mp-mic" type="button">🎤 语音输入</button>
     <div id="mp-shot-row">
       <label id="mp-shot-label" for="mp-shot">📷 上传聊天截图</label>
       <input type="file" id="mp-shot" accept="image/*" hidden>
@@ -165,6 +167,6 @@
 
 </div>
 <script src="config.js"></script>
-<script src="app.js?v=28"></script>
+<script src="app.js?v=29"></script>
 </body>
 </html>
