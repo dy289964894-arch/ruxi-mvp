@@ -71,17 +71,9 @@ def main():
     global ENV
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
     ENV = load_env()
-    key = ENV.get("DEEPSEEK_KEY", "")
-    builtin = {
-        "base": "/api",
-        "key": "builtin",
-        "model": ENV.get("DEEPSEEK_MODEL", "deepseek-chat"),
-    } if key else None
-    with open(os.path.join(BASE, "config.js"), "w", encoding="utf-8") as f:
-        f.write("window.MVP_BUILTIN_CFG=" + json.dumps(builtin, ensure_ascii=False) + ";\n")
     os.chdir(BASE)
-    if builtin:
-        print(f"[start] 大模型代理已启用：{ENV.get('DEEPSEEK_BASE')} model={builtin['model']}（key 不进入浏览器）")
+    if ENV.get("DEEPSEEK_KEY"):
+        print(f"[start] 大模型代理已启用：{ENV.get('DEEPSEEK_BASE')} model={ENV.get('DEEPSEEK_MODEL', '')}（key 不进入浏览器）")
     else:
         print("[start] .env 未填 DEEPSEEK_KEY，按演示模式启动")
     http.server.ThreadingHTTPServer.allow_reuse_address = True

@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/chat/completions.py": {
+      "maxDuration": 60
+    }
+  }
+}
