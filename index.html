@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>入戏 · 职场情景对练</title>
+<link rel="stylesheet" href="style.css?v=21">
+</head>
+<body>
+<div id="phone">
+
+  <!-- 登录页 -->
+  <section id="login" class="hidden">
+    <div class="login-inner">
+      <h1>入戏</h1>
+      <p class="tagline">把那场重要谈话，先练一遍</p>
+      <input id="login-name" maxlength="12" placeholder="怎么称呼你（可留空）" autocomplete="off">
+      <button id="btn-login">进入练习场</button>
+      <p class="login-note">本地演示版 · 练习数据只存在这台设备上</p>
+    </div>
+  </section>
+
+  <!-- 首页：场景选择 -->
+  <section id="home">
+    <header>
+      <h1>入戏</h1>
+      <p class="sub" id="home-sub">职场情景对练</p>
+      <button id="btn-settings" aria-label="设置">⚙</button>
+    </header>
+    <div id="scene-list"></div>
+  </section>
+
+  <!-- 进步页 -->
+  <section id="progress" class="hidden">
+    <header><h2>进步</h2></header>
+    <div id="stat-cards">
+      <div><b id="st-count">0</b><span>练习次数</span></div>
+      <div><b id="st-avg">–</b><span>平均分</span></div>
+      <div><b id="st-streak">0</b><span>连续天数</span></div>
+    </div>
+    <h3 class="sec">四项能力 · 平均</h3>
+    <div id="dim-bars"></div>
+    <h3 class="sec">最近练习</h3>
+    <div id="history"></div>
+    <p id="no-history" class="empty-note">还没有练习记录——去对练页开第一局。</p>
+  </section>
+
+  <!-- 我的 -->
+  <section id="me" class="hidden">
+    <div id="me-card">
+      <div id="me-avatar">练</div>
+      <div id="me-info">
+        <b id="me-name"></b>
+        <span id="me-since"></span>
+      </div>
+    </div>
+    <div id="me-stats"></div>
+    <div class="menu">
+      <button id="me-settings">大模型设置<span>›</span></button>
+      <button id="me-about">关于入戏<span>›</span></button>
+      <button id="me-clear">清空练习记录<span>›</span></button>
+      <button id="me-logout" class="danger">退出登录<span>›</span></button>
+    </div>
+    <p class="empty-note">正式版将支持微信登录、云端同步和进步曲线。</p>
+  </section>
+
+  <!-- 嘴替 -->
+  <section id="mouthpiece" class="hidden">
+    <header><h2>嘴替</h2></header>
+    <p class="mp-hint">把对方发来的原话粘进来，或上传聊天截图，给你三种回法。</p>
+    <textarea id="mp-input" rows="4" placeholder="比如：这个方案今晚必须给我"></textarea>
+    <div id="mp-shot-row">
+      <label id="mp-shot-label" for="mp-shot">📷 上传聊天截图</label>
+      <input type="file" id="mp-shot" accept="image/*" hidden>
+      <div id="mp-shot-view" class="hidden">
+        <img id="mp-shot-img" alt="聊天截图">
+        <button id="mp-shot-x" title="移除截图">✕</button>
+      </div>
+    </div>
+    <textarea id="mp-extra" rows="2" placeholder="补充背景（可选）：你们的关系、之前发生过什么、你想达到什么效果"></textarea>
+    <div id="mp-opts">
+      <select id="mp-who"><option>领导</option><option>同事</option><option>下属</option><option>客户</option><option>亲友</option></select>
+      <select id="mp-goal"><option>看情况</option><option>想拒绝</option><option>想争取</option><option>想澄清</option><option>想灭火</option></select>
+    </div>
+    <button id="mp-go">给我三种回法</button>
+    <div id="mp-out"></div>
+  </section>
+
+  <!-- 对练页 -->
+  <section id="play" class="hidden">
+    <img id="bg" alt="">
+    <div id="scrim"></div>
+    <header id="play-head">
+      <button id="btn-back">‹</button>
+      <div>
+        <div id="play-title"></div>
+        <div id="play-tag"></div>
+      </div>
+      <div id="timer" class="hidden">60</div>
+    </header>
+
+    <div id="bubble-wrap">
+      <div id="setting-line"></div>
+      <details id="brief-card">
+        <summary>📋 背景资料 · 你手上的信息</summary>
+        <div id="brief-body"></div>
+      </details>
+      <div id="bubble" class="hidden"></div>
+    </div>
+
+    <img id="char" alt="">
+    <div id="char-chip"><b id="char-name"></b><span id="char-title"></span></div>
+
+    <div id="goal-bar" class="hidden"></div>
+
+    <div id="input-bar" class="hidden">
+      <button id="btn-mic" title="按住说话">🎤</button>
+      <textarea id="answer" rows="2" placeholder="开口回答他…（也可打字）"></textarea>
+      <button id="btn-send">交卷</button>
+    </div>
+
+    <!-- 结果页 -->
+    <div id="result" class="hidden">
+      <div id="result-card">
+        <div id="seal"><span id="score"></span></div>
+        <div id="verdict"></div>
+        <div id="inner-voice"></div>
+        <div id="feedback"></div>
+        <div id="dims"></div>
+        <div id="rounds"></div>
+        <h3>三种打法</h3>
+        <div id="strategies"></div>
+        <div id="redline-note"></div>
+        <div class="row">
+          <button id="btn-retry">再答一次</button>
+          <button id="btn-next">下一幕</button>
+        </div>
+        <button id="btn-home">‹ 回首页</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 设置 -->
+  <div id="settings" class="hidden">
+    <div id="settings-card">
+      <h2>大模型设置</h2>
+      <p class="hint">不配也能玩（演示评分）。配任意 OpenAI 兼容接口即为真实评分。</p>
+      <label>接口地址<input id="cfg-base" placeholder="https://api.deepseek.com/v1"></label>
+      <label>API Key<input id="cfg-key" type="password" placeholder="sk-..."></label>
+      <label>模型<input id="cfg-model" placeholder="deepseek-chat"></label>
+      <div class="row">
+        <button id="cfg-save">保存</button>
+        <button id="cfg-close">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部导航 -->
+  <nav id="tabbar" class="hidden">
+    <button data-tab="home" class="on">🎭<span>对练</span></button>
+    <button data-tab="mouthpiece">💬<span>嘴替</span></button>
+    <button data-tab="progress">📈<span>进步</span></button>
+    <button data-tab="me">👤<span>我的</span></button>
+  </nav>
+
+</div>
+<script src="config.js"></script>
+<script src="app.js?v=28"></script>
+</body>
+</html>
