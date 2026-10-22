@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>入戏 · 职场情景对练</title>
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
 <div id="phone">
@@ -115,10 +115,20 @@
 
     <div id="goal-bar" class="hidden"></div>
 
+    <div id="rec-bar" class="hidden">
+      <span class="rec-dot"></span>
+      <span class="rec-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <span id="rec-time">0:00</span>
+      <span class="rec-tip">正在录音，说完点「完成」</span>
+      <button id="btn-rec-done" type="button">完成</button>
+    </div>
+
+    <div id="rec-err" class="hidden"></div>
+
     <div id="input-bar" class="hidden">
-      <button id="btn-mic" title="按住说话">🎤</button>
+      <button id="btn-mic" title="点我开始说话">🎤 说话</button>
       <textarea id="answer" rows="2" placeholder="开口回答他…（也可打字）"></textarea>
-      <button id="btn-send">交卷</button>
+      <button id="btn-send">完成并提交</button>
     </div>
 
     <!-- 结果页 -->
@@ -167,6 +177,6 @@
 
 </div>
 <script src="config.js"></script>
-<script src="app.js?v=30"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>

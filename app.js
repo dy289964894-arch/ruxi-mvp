@@ -292,7 +292,7 @@ async function submit(timeout) {
     const ask = (customAsk || f.ask).trim();
     if (f) askedPoints.push(f.point);
     peerLines.push(ask);
-    btn.disabled = false; btn.textContent = "交卷";
+    btn.disabled = false; btn.textContent = "完成并提交";
     askFollowup(ask, missed.length >= 2 ? "displeased" : "thinking");
     return;
   }
@@ -310,7 +310,7 @@ async function finish(timeout) {
     catch (e) { console.warn("LLM 评分失败，降级演示评分：", e); }
   }
   if (!r) r = localScore(cur, answers.join("\n"), timeout);
-  btn.disabled = false; btn.textContent = "交卷";
+  btn.disabled = false; btn.textContent = "完成并提交";
   showResult(r);
 }
 
@@ -535,9 +535,36 @@ function showResult(r) {
 }
 
 /* ---------- 语音 ---------- */
+let recStart = 0, recTick = null;
+function uiRecStart() {
+  $("rec-bar").classList.remove("hidden");
+  $("btn-mic").classList.add("rec");
+  $("answer").placeholder = "正在听你说…";
+  recStart = Date.now();
+  $("rec-time").textContent = "0:00";
+  clearInterval(recTick);
+  recTick = setInterval(() => {
+    const s = Math.floor((Date.now() - recStart) / 1000);
+    $("rec-time").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  }, 500);
+}
+function uiRecStop() {
+  $("rec-bar").classList.add("hidden");
+  $("btn-mic").classList.remove("rec");
+  $("answer").placeholder = "开口回答他…（也可打字）";
+  clearInterval(recTick); recTick = null;
+}
+let recErrT = null;
+function showRecErr(msg) {
+  const el = $("rec-err");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+  clearTimeout(recErrT);
+  recErrT = setTimeout(() => el.classList.add("hidden"), 5000);
+}
 function setupRecog() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { $("btn-mic").style.display = "none"; return; }
+  if (!SR) return;   // 不支持时保留按钮，点击会提示
   recog = new SR();
   recog.lang = "zh-CN";
   recog.interimResults = false;
@@ -545,8 +572,18 @@ function setupRecog() {
     const t = e.results[0][0].transcript;
     $("answer").value = ($("answer").value + t).slice(0, 500);
   };
-  recog.onend = () => { recogOn = false; $("btn-mic").classList.remove("rec"); };
-  recog.onerror = () => { recogOn = false; $("btn-mic").classList.remove("rec"); };
+  recog.onend = () => { recogOn = false; uiRecStop(); };
+  recog.onerror = (e) => {
+    recogOn = false; uiRecStop();
+    const map = {
+      "not-allowed": "麦克风权限被拒：请允许麦克风后再点「说话」，或直接打字",
+      "service-not-allowed": "当前浏览器禁用了语音识别服务，请直接打字",
+      "network": "这个浏览器的语音识别依赖在线服务，连不上——请直接打字",
+      "audio-capture": "没找到麦克风设备，请检查后再试",
+      "no-speech": "没听到声音，请靠近话筒再说一次",
+    };
+    showRecErr(map[e.error] || ("语音识别失败（" + e.error + "），请直接打字"));
+  };
 }
 function stopRecog() { if (recog && recogOn) recog.stop(); }
 
@@ -614,10 +651,11 @@ function bindGlobal() {
   });
   $("answer").addEventListener("input", () => { lastType = Date.now(); });
   $("btn-mic").addEventListener("click", () => {
-    if (!recog) return;
+    if (!recog) { showRecErr("此浏览器不支持语音输入，请直接打字（电脑端可用 Chrome/Edge）"); return; }
     if (recogOn) { stopRecog(); }
-    else { try { recog.start(); recogOn = true; $("btn-mic").classList.add("rec"); } catch {} }
+    else { try { recog.start(); recogOn = true; uiRecStart(); } catch { showRecErr("录音启动失败，请刷新页面后再试，或直接打字"); } }
   });
+  $("btn-rec-done").addEventListener("click", () => stopRecog());
   $("btn-retry").addEventListener("click", () => {
     $("result").classList.add("hidden");
     $("answer").value = "";

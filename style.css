@@ -112,6 +112,33 @@ button { font-family: inherit; cursor: pointer; }
 #btn-mic.rec { background: var(--seal); border-color: var(--seal); color: #fff; animation: pulse 1.2s infinite; }
 #btn-send { background: var(--seal); border-color: var(--seal); color: #fff; font-weight: 700; letter-spacing: 2px; }
 
+/* 录音状态条：红点 + 声波 + 计时 + 完成 */
+#rec-bar { position: absolute; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 7;
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(20,20,24,.94); border: 1px solid var(--seal); border-radius: 14px;
+  padding: 10px 12px; backdrop-filter: blur(8px);
+  box-shadow: 0 6px 24px rgba(192,57,43,.35); }
+.rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #e5484d; flex: none;
+  animation: pulse 1.2s infinite; }
+.rec-wave { display: flex; align-items: center; gap: 3px; height: 20px; flex: none; }
+.rec-wave i { width: 3px; height: 14px; border-radius: 2px; background: var(--gold);
+  transform-origin: center; animation: wave 1s ease-in-out infinite; }
+.rec-wave i:nth-child(2) { animation-delay: .12s; }
+.rec-wave i:nth-child(3) { animation-delay: .24s; }
+.rec-wave i:nth-child(4) { animation-delay: .36s; }
+.rec-wave i:nth-child(5) { animation-delay: .48s; }
+.rec-wave i:nth-child(6) { animation-delay: .60s; }
+.rec-wave i:nth-child(7) { animation-delay: .72s; }
+@keyframes wave { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+#rec-time { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; flex: none; }
+.rec-tip { flex: 1; font-size: 11px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; }
+#btn-rec-done { flex: none; background: var(--seal); color: #fff; border: none; border-radius: 10px;
+  height: 34px; padding: 0 16px; font-size: 14px; font-weight: 700; font-family: inherit; }
+body.light #rec-bar { background: rgba(255,255,255,.95); border-color: var(--seal); }
+#rec-err { position: absolute; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 8;
+  background: rgba(192,57,43,.95); color: #fff; font-size: 12px; line-height: 1.5;
+  padding: 9px 12px; border-radius: 10px; }
+
 /* ---------- 结果页 ---------- */
 #result { position: absolute; inset: 0; z-index: 10; background: rgba(5,5,7,.72);
   backdrop-filter: blur(6px); display: flex; align-items: flex-end; }
