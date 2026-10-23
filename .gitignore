@@ -1,2 +1,6 @@
 .env
 __pycache__/
+
+# 本地验证产物
+verify_shots/
+assets/_check_*.jpg

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>入戏 · 职场情景对练</title>
-<link rel="stylesheet" href="style.css?v=24">
+<link rel="stylesheet" href="style.css?v=26">
 </head>
 <body>
 <div id="phone">
@@ -20,19 +20,76 @@
     </div>
   </section>
 
-  <!-- 首页：场景选择 -->
+  <!-- 7.1 今日 -->
   <section id="home">
-    <header>
-      <h1>入戏</h1>
-      <p class="sub" id="home-sub">职场情景对练</p>
-      <button id="btn-settings" aria-label="设置">⚙</button>
+    <header id="today-head">
+      <div id="brand">入戏</div>
+      <div id="greet-row">
+        <h1 id="greeting">你好</h1>
+        <span id="streak-chip" class="hidden">连续 <b id="streak-n">0</b> 天</span>
+      </div>
     </header>
+
+    <button id="mp-entry" type="button">
+      <b>嘴替</b><span>刚遇到难接的话？说给我听</span><i>🎤</i>
+    </button>
+
+    <div id="task-card">
+      <div id="task-cols">
+        <div class="tc">
+          <span class="tc-lbl">今日新题</span>
+          <b id="today-new">0/5</b>
+          <div class="segs" id="new-segs"><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <div class="tc">
+          <span class="tc-lbl">到期复习</span>
+          <b id="due-count">0 <small>题</small></b>
+        </div>
+      </div>
+      <button id="btn-today-go" type="button">开始今日练习 →</button>
+    </div>
+
+    <h3 class="sec">今日题目</h3>
+    <div id="today-scenes"></div>
+
+    <button id="continue-card" class="hidden" type="button">
+      <img id="continue-bg" alt="">
+      <div class="cc-txt">
+        <span class="cc-cap">继续实战</span>
+        <b id="continue-title"></b>
+        <span class="cc-sub" id="continue-sub"></span>
+      </div>
+    </button>
+
+    <div id="week-grid">
+      <div class="mini-card">
+        <h4>本周进步</h4>
+        <div id="week-body"><p class="mini-dim">练几局语音后，这里有前后对比。</p></div>
+      </div>
+      <div class="mini-card">
+        <h4>嘴力等级</h4>
+        <b id="level-name">实习嘴替</b>
+        <p class="mini-dim" id="level-next"></p>
+      </div>
+    </div>
+
+    <h3 class="sec">全部场景</h3>
     <div id="scene-list"></div>
   </section>
 
-  <!-- 进步页 -->
+  <!-- 实战（阶段二占位） -->
+  <section id="battle" class="hidden">
+    <header><h2 class="page-title">实战</h2></header>
+    <div class="placeholder-card">
+      <b>多轮实战 · 阶段二开放</b>
+      <p>连续追问、你来我往的完整对局正在排期。现在先去「今日」练单轮——每幕 90 秒，一样长本事。</p>
+      <button id="battle-go" type="button">去练单轮 →</button>
+    </div>
+  </section>
+
+  <!-- 成长 -->
   <section id="progress" class="hidden">
-    <header><h2>进步</h2></header>
+    <header><h2 class="page-title">成长</h2></header>
     <div id="stat-cards">
       <div><b id="st-count">0</b><span>练习次数</span></div>
       <div><b id="st-avg">–</b><span>平均分</span></div>
@@ -40,9 +97,12 @@
     </div>
     <h3 class="sec">四项能力 · 平均</h3>
     <div id="dim-bars"></div>
+    <h3 class="sec">错题本</h3>
+    <div id="mistake-list"></div>
+    <p id="no-mistake" class="empty-note">踩线或低分的幕会进错题本，到期提醒你复习。</p>
     <h3 class="sec">最近练习</h3>
     <div id="history"></div>
-    <p id="no-history" class="empty-note">还没有练习记录——去对练页开第一局。</p>
+    <p id="no-history" class="empty-note">还没有练习记录——去今日页开第一局。</p>
   </section>
 
   <!-- 我的 -->
@@ -56,7 +116,6 @@
     </div>
     <div id="me-stats"></div>
     <div class="menu">
-      <button id="me-theme">外观：浅色<span>›</span></button>
       <button id="me-settings">大模型设置<span>›</span></button>
       <button id="me-about">关于入戏<span>›</span></button>
       <button id="me-clear">清空练习记录<span>›</span></button>
@@ -67,7 +126,7 @@
 
   <!-- 嘴替 -->
   <section id="mouthpiece" class="hidden">
-    <header><h2>嘴替</h2></header>
+    <header><h2 class="page-title">嘴替</h2></header>
     <p class="mp-hint">把对方发来的原话粘进来、语音输入，或上传聊天截图，给你三种回法。</p>
     <textarea id="mp-input" rows="4" placeholder="比如：这个方案今晚必须给我"></textarea>
     <button id="btn-mp-mic" type="button">🎤 语音输入</button>
@@ -88,67 +147,179 @@
     <div id="mp-out"></div>
   </section>
 
-  <!-- 对练页 -->
+  <!-- 7.2 对练页 -->
   <section id="play" class="hidden">
     <img id="bg" alt="">
     <div id="scrim"></div>
+    <div id="spotlight"></div>
+
     <header id="play-head">
       <button id="btn-back">‹</button>
-      <div>
+      <div id="play-head-txt">
         <div id="play-title"></div>
         <div id="play-tag"></div>
       </div>
       <div id="timer" class="hidden">60</div>
     </header>
 
-    <div id="bubble-wrap">
-      <div id="setting-line"></div>
+    <div id="stage">
+      <div id="chips"></div>
+      <img id="char" alt="">
+      <div id="nameplate"><b id="char-name"></b><i></i><span id="char-title"></span></div>
+      <div id="situation"></div>
       <details id="brief-card">
-        <summary>📋 背景资料 · 你手上的信息</summary>
+        <summary>📋 你手上的信息</summary>
         <div id="brief-body"></div>
       </details>
-      <div id="bubble" class="hidden"></div>
     </div>
 
-    <img id="char" alt="">
-    <div id="char-chip"><b id="char-name"></b><span id="char-title"></span></div>
-
-    <div id="goal-bar" class="hidden"></div>
-
-    <div id="rec-bar" class="hidden">
-      <span class="rec-dot"></span>
-      <span class="rec-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-      <span id="rec-time">0:00</span>
-      <span class="rec-tip">正在录音，说完点「完成」</span>
-      <button id="btn-rec-done" type="button">完成</button>
+    <div id="subtitle-band">
+      <div id="bubble"></div>
+      <div id="goal-line"></div>
     </div>
 
-    <div id="rec-err" class="hidden"></div>
-
-    <div id="input-bar" class="hidden">
-      <button id="btn-mic" title="点我开始说话">🎤 说话</button>
-      <textarea id="answer" rows="2" placeholder="开口回答他…（也可打字）"></textarea>
-      <button id="btn-send">完成并提交</button>
+    <!-- 待开始：大麦克风 + 打字次要入口 -->
+    <div id="idle-area" class="hidden">
+      <button id="btn-big-mic" type="button" aria-label="开始录音">🎤</button>
+      <p id="idle-tip">点一下，开口回答</p>
+      <button id="btn-type-instead" type="button">打字代替 ›</button>
     </div>
 
-    <!-- 结果页 -->
-    <div id="result" class="hidden">
-      <div id="result-card">
-        <div id="seal"><span id="score"></span></div>
-        <div id="verdict"></div>
-        <div id="inner-voice"></div>
-        <div id="feedback"></div>
-        <div id="dims"></div>
-        <div id="rounds"></div>
-        <h3>三种打法</h3>
-        <div id="strategies"></div>
-        <div id="redline-note"></div>
-        <div class="row">
-          <button id="btn-retry">再答一次</button>
-          <button id="btn-next">下一幕</button>
-        </div>
-        <button id="btn-home">‹ 回首页</button>
+    <!-- 录音区 -->
+    <div id="rec-area" class="hidden">
+      <div id="rec-status"><span class="rec-dot"></span><span id="rec-status-text">正在录音，说完点“完成并提交”</span></div>
+      <div id="rec-meter">
+        <span id="rec-time">0:00</span>
+        <canvas id="wave" width="220" height="36"></canvas>
+        <span id="rec-left"></span>
       </div>
+      <div id="rec-btns">
+        <div class="rb">
+          <button id="btn-cancel" class="rb44" type="button" aria-label="取消">✕</button>
+          <span>取消</span>
+        </div>
+        <div class="rb">
+          <button id="btn-done-submit" class="rb68" type="button" aria-label="完成并提交">
+            <svg id="ring" viewBox="0 0 84 84"><circle id="ring-track" cx="42" cy="42" r="40"/><circle id="ring-prog" cx="42" cy="42" r="40"/></svg>✓
+          </button>
+          <span>完成并提交</span>
+        </div>
+        <div class="rb">
+          <button id="btn-done" class="rb52" type="button" aria-label="完成">■</button>
+          <span>完成</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 识别中 -->
+    <div id="recog-area" class="hidden">
+      <div class="spinner"></div>
+      <p>识别中…</p>
+    </div>
+
+    <!-- 确认识别文字 -->
+    <div id="confirm-area" class="hidden">
+      <p id="confirm-tip">识别完成——改一改再提交，或重录。</p>
+      <textarea id="transcript" rows="3" maxlength="500"></textarea>
+      <div class="row">
+        <button id="btn-rerecord" type="button">↻ 重录</button>
+        <button id="btn-submit-text" type="button">提交 ✓</button>
+      </div>
+    </div>
+
+    <!-- 打字区（次要入口） -->
+    <div id="input-bar" class="hidden">
+      <button id="btn-mic" title="改用手机麦克风">🎤</button>
+      <textarea id="answer" rows="2" placeholder="开口回答他…（也可打字）"></textarea>
+      <button id="btn-send">提交</button>
+    </div>
+
+    <!-- 录音失败提示 -->
+    <div id="rec-err" class="hidden">
+      <p id="rec-err-msg"></p>
+      <div id="rec-err-btns"></div>
+    </div>
+
+    <!-- 麦克风授权前的自家说明 -->
+    <div id="pre-perm" class="hidden">
+      <div id="pre-perm-card">
+        <h3>要用一下你的麦克风</h3>
+        <p>入戏是开口练习：你的声音只用于当场转成文字打分，不留存、不公开。不想开麦也可以全程打字。</p>
+        <div class="row">
+          <button id="pre-perm-cancel" type="button">先打字</button>
+          <button id="pre-perm-ok" type="button">好，去授权</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7.3 结果页（整页滚动） -->
+    <div id="result" class="hidden">
+      <div id="result-scroll">
+        <header id="result-nav">
+          <b>单轮结果</b>
+          <span id="result-scene"></span>
+        </header>
+
+        <div id="score-row">
+          <span id="score"></span><span class="fen">分</span>
+          <span id="seal-tag"></span>
+          <span id="points-delta"></span>
+        </div>
+        <p id="one-comment"></p>
+        <p id="inner-voice"></p>
+        <div id="dims"></div>
+
+        <section class="r-card" id="rubric-card">
+          <h3>评分要点 <span id="rubric-ach"></span></h3>
+          <ul id="rubric-list"></ul>
+        </section>
+
+        <section class="r-card r-danger hidden" id="redline-card">
+          <h3>⚠ 雷区命中</h3>
+          <ul id="redline-list"></ul>
+        </section>
+
+        <section class="r-card" id="voice-card">
+          <h3>语音指标</h3>
+          <div id="voice-grid">
+            <div><span>开口用时</span><b id="v-open">–</b><i id="v-open-tag"></i></div>
+            <div><span>时长</span><b id="v-dur">–</b><i id="v-dur-tag"></i></div>
+            <div><span>语速</span><b id="v-rate">–</b><i id="v-rate-tag"></i></div>
+            <div><span>口头禅</span><b id="v-filler">–</b><i id="v-filler-tag"></i></div>
+          </div>
+        </section>
+
+        <section class="r-card hidden" id="rewrite-card">
+          <h3>你的原话 → 改写版 <span class="ai-tag">AI 生成</span></h3>
+          <p class="seg-label">你的原话</p>
+          <p id="orig-seg"></p>
+          <p class="seg-label">改写版</p>
+          <p id="rew-seg"></p>
+        </section>
+
+        <div id="rounds"></div>
+
+        <section class="r-card r-curtain" id="subtext-card">
+          <h3>潜台词</h3>
+          <p id="subtext-q">他当众问你这一句，真正想干什么？</p>
+          <button id="btn-reveal" type="button">揭晓</button>
+          <p id="subtext-body" class="hidden"></p>
+        </section>
+
+        <section id="demo-sec">
+          <h3 class="sec">高分示范 · 3版</h3>
+          <div id="strategies"></div>
+        </section>
+
+        <p id="mistake-note" class="hidden">已加入错题本 · 3天后复习</p>
+        <p class="ai-note">以上点评由 AI 生成</p>
+        <div class="bottom-pad"></div>
+      </div>
+      <div id="result-bar">
+        <button id="btn-next" type="button">下一题</button>
+        <button id="btn-retry" type="button">再练一遍</button>
+      </div>
+      <button id="btn-home" type="button">‹ 回今日页</button>
     </div>
   </section>
 
@@ -169,14 +340,15 @@
 
   <!-- 底部导航 -->
   <nav id="tabbar" class="hidden">
-    <button data-tab="home" class="on">🎭<span>对练</span></button>
-    <button data-tab="mouthpiece">💬<span>嘴替</span></button>
-    <button data-tab="progress">📈<span>进步</span></button>
+    <button data-tab="home" class="on">☀<span>今日</span></button>
+    <button data-tab="battle">🎭<span>实战</span></button>
+    <button data-tab="mouthpiece" id="tab-mp">💬<span>嘴替</span></button>
+    <button data-tab="progress">📈<span>成长</span></button>
     <button data-tab="me">👤<span>我的</span></button>
   </nav>
 
 </div>
 <script src="config.js"></script>
-<script src="app.js?v=33"></script>
+<script src="app.js?v=35"></script>
 </body>
 </html>
