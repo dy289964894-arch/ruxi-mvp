@@ -1256,6 +1256,8 @@ async function showResult(r) {
   seal.classList.toggle("good", !r.redline_hit && r.total >= 70);
   $("points-delta").textContent = `嘴力值 +${delta}`;
   $("one-comment").textContent = r.feedback || "";
+  $("comment-ai").classList.toggle("hidden", !!r.demo);
+  document.querySelector("#result .ai-note").classList.toggle("hidden", !!r.demo);
   $("inner-voice").textContent = (cur.reactions && cur.reactions[REACTION_KEY[expr]]) || "……";
   $("dims").innerHTML = ["看懂", "说对", "办成", "稳住"]
     .map((d) => `<div><b>${Math.round(r.dims[d] ?? 0)}</b>${d}</div>`).join("");
