@@ -6,9 +6,6 @@ const $ = (id) => document.getElementById(id);
 window.addEventListener("error", (e) => { document.title = "ERR:" + e.message; });
 
 const EXPR = ["smile", "calm", "thinking", "awkward", "displeased"];
-const REACTION_KEY = {
-  smile: "满意", calm: "平静", thinking: "思考", awkward: "尴尬", displeased: "不悦",
-};
 
 let scenes = [];
 let reveals = null;    // 隐藏数据：提交后才 fetch（硬规则1：作答前不下发）
@@ -37,7 +34,7 @@ async function init() {
     scenes = await (await fetch("scenes.json?v=5")).json();
   } catch (e) {
     ok = false;
-    $("scene-list").innerHTML =
+    $("today-scenes").innerHTML =
       '<p style="color:#E8705F;padding:20px">scenes.json 加载失败——请用本地服务器打开<br>python -X utf8 start.py</p>';
   }
   try { followups = await (await fetch("followups.json?v=1")).json(); } catch { followups = {}; }
@@ -120,7 +117,6 @@ function renderToday() {
   $("greeting").textContent = `${greetByHour()}，${(u && u.name) || "练习生"}`;
   const log = getAttempts();
   const streak = streakOf(log);
-  $("streak-chip").classList.toggle("hidden", streak <= 0);
   $("streak-n").textContent = streak;
 
   // 今日任务卡
@@ -128,12 +124,12 @@ function renderToday() {
   const todayLog = log.filter((a) => dayKey(a.ts) === today);
   const todayScenes = new Set(todayLog.map((a) => a.id));
   const newN = Math.min(5, todayScenes.size);
-  $("today-new").textContent = `${newN}/5`; // TODO(待确认)：每日新题目标 5
+  $("today-new").textContent = newN; // TODO(待确认)：每日新题目标 5
   document.querySelectorAll("#new-segs i").forEach((el, i) => el.classList.toggle("on", i < newN));
   const due = dueMistakes();
-  $("due-count").innerHTML = `${due.length} <small>题</small>`;
+  $("due-count").textContent = due.length;
 
-  // 今日题目横滑：到期复习 > 没练过的 > 最久没练的
+  // 今日题目横滑：到期复习 > 没练过的 > 最久没练的（对齐设计稿 4 张）
   const lastTs = {};
   for (const a of log) if (!lastTs[a.id] || a.ts > lastTs[a.id]) lastTs[a.id] = a.ts;
   const dueIds = new Set(due.map((m) => m.scene_id));
@@ -143,30 +139,37 @@ function renderToday() {
       if (ad !== bd) return ad - bd;
       return (lastTs[a.s.id] || 0) - (lastTs[b.s.id] || 0);
     });
-  $("today-scenes").innerHTML = ranked.slice(0, 6).map(({ s, i }, k) => `
+  let freshK = 0;
+  $("today-scenes").innerHTML = ranked.slice(0, 4).map(({ s, i }) => {
+    const lbl = dueIds.has(s.id) ? "到期复习" : `新题 · 第 ${Math.min(5, newN + freshK++ + 1)} 题`;
+    return `
     <button class="tsc" data-i="${i}">
       <div class="tsc-head">
         <img src="assets/${s.char}_calm.png" alt="" onerror="this.style.display='none'">
-        <span class="tsc-new">${dueIds.has(s.id) ? "复习" : lastTs[s.id] ? "练过" : `新题 · 第${k + 1}题`}</span>
+        <i class="tsc-fade"></i>
+        <span class="tsc-new">${lbl}</span>
       </div>
       <div class="tsc-body">
         <div class="tsc-who">${s.char_name} · ${s.char_title}</div>
         <div class="tsc-line">${s.trigger_line}</div>
         <div class="tsc-meta"><span class="stars">${"★".repeat(s.difficulty)}</span><span>${s.time_limit_s} 秒</span></div>
       </div>
-    </button>`).join("");
+    </button>`;
+  }).join("");
   document.querySelectorAll(".tsc").forEach((el) =>
     el.addEventListener("click", () => openScene(+el.dataset.i)));
 
-  // 继续实战：最近一次练过的幕
+  // 继续实战：最近一次练过的幕（多轮未实现，进度=今日该幕已练次数，封顶 5）
   if (log.length) {
     const last = log[0];
     const s = scenes.find((x) => x.id === last.id);
     if (s) {
       $("continue-card").classList.remove("hidden");
       $("continue-bg").src = `assets/${s.bg}`;
-      $("continue-title").textContent = `${s.id} · ${s.title}`;
-      $("continue-sub").textContent = `上次 ${last.total} 分 · ${last.verdict}`;
+      $("continue-title").textContent = s.title;
+      const n = Math.min(5, todayLog.filter((a) => a.id === s.id).length);
+      document.querySelectorAll("#continue-segs i").forEach((el, i) => el.classList.toggle("on", i < n));
+      $("continue-sub").textContent = `进度 ${n}/5`;
       $("continue-card").onclick = () => openScene(scenes.indexOf(s));
     }
   } else {
@@ -182,13 +185,11 @@ function renderToday() {
     const avg = (arr, f) => arr.reduce((s, a) => s + a.voice[f], 0) / arr.length;
     const od0 = avg(older, "open_delay"), od1 = avg(recent, "open_delay");
     const fl0 = avg(older, "fillers"), fl1 = avg(recent, "fillers");
-    const arrow = (a, b, unit) => {
-      const better = b < a;
-      return `<div class="wk">开口用时 <b>${a.toFixed(1)} → ${b.toFixed(1)}</b> <span class="${better ? "up" : "down"}">${unit}</span></div>`;
-    };
+    const row = (lbl, a, b, unit) =>
+      `<div class="wk"><span class="wk-lbl">${lbl}</span><span class="wk-val">${a} <i>→</i> ${b} <small>${unit}</small></span></div>`;
     $("week-body").innerHTML =
-      arrow(od0, od1, "秒") +
-      `<div class="wk">口头禅 <b>${fl0.toFixed(0)} → ${fl1.toFixed(0)}</b> <span class="${fl1 <= fl0 ? "up" : "down"}">次</span></div>`;
+      row("开口用时", od0.toFixed(1), od1.toFixed(1), "秒") +
+      row("口头禅", fl0.toFixed(0), fl1.toFixed(0), "次");
   } else {
     $("week-body").innerHTML = '<p class="mini-dim">练几局语音后，这里有前后对比。</p>';
   }
@@ -197,19 +198,12 @@ function renderToday() {
   const p = getProgress();
   const lv = levelOf(p.points || 0);
   $("level-name").textContent = lv.cur.name;
-  $("level-next").textContent = lv.next
-    ? `再得 ${lv.next.at - (p.points || 0)} 嘴力值 升到${lv.next.name}`
+  const pts = p.points || 0;
+  $("level-bar-i").style.width = (lv.next
+    ? Math.min(100, Math.round((pts - lv.cur.at) / (lv.next.at - lv.cur.at) * 100)) : 100) + "%";
+  $("level-next").innerHTML = lv.next
+    ? `再得 <b>${lv.next.at - pts}</b> 嘴力值<br>升到${lv.next.name}`
     : "已是最高等级";
-
-  // 全部场景
-  $("scene-list").innerHTML = scenes.map((s, i) => `
-    <button class="scene-item" style="background-image:url('assets/${s.bg}')" data-i="${i}">
-      <div class="veil"></div>
-      <div class="txt"><b>${s.id} · ${s.title}</b><span>${s.tag}</span></div>
-      <div class="diff">${"★".repeat(s.difficulty)}</div>
-    </button>`).join("");
-  document.querySelectorAll(".scene-item").forEach((el) =>
-    el.addEventListener("click", () => openScene(+el.dataset.i)));
 }
 
 /* ---------- 底部导航 ---------- */
@@ -320,6 +314,7 @@ function renderMe() {
 
 /* ---------- 场景 ---------- */
 function openScene(i) {
+  stopSpeaking();
   curIdx = i;
   cur = Object.assign({}, scenes[i]);      // 公开字段；隐藏字段提交后才合并
   phase = "typing";
@@ -338,9 +333,6 @@ function openScene(i) {
   $("chips").innerHTML = chips.map((c) => `<span class="chip">${c}</span>`).join("")
     + `<span class="chip gold">难度 ${"★".repeat(cur.difficulty)}</span>`
     + `<span class="chip gold">限时 ${cur.time_limit_s} 秒</span>`;
-  $("brief-body").innerHTML = (cur.brief || [])
-    .map((b) => `<p><b>${b.label}</b>${b.text}</p>`).join("");
-  $("brief-card").open = false;
   $("goal-line").innerHTML = `<b>目标</b>　${cur.goal}`;
   $("answer").value = "";
   $("input-bar").classList.add("hidden");
@@ -393,7 +385,6 @@ function startTimer(sec) {
   el.classList.remove("hidden", "urgent");
   el.textContent = left;
   timerId = setInterval(() => {
-    if ($("brief-card").open) return;
     el.textContent = --left;
     if (left <= 10) el.classList.add("urgent");
     if (left <= 0) {
@@ -992,12 +983,19 @@ function voiceMetrics() {
   };
 }
 
-/* 评分要点达成：LLM 给了用 LLM 的；否则按维度分 ≥60 推定 */
+/* 评分要点条目归一化：兼容布尔 / 字符串 / 新 {ok,note} 三种格式 */
+function normPoint(x) {
+  if (x && typeof x === "object") return { ok: !!x.ok, note: String(x.note || "").slice(0, 24) };
+  if (typeof x === "string") return { ok: x === "true" || x === "达成", note: "" };
+  return { ok: !!x, note: "" };
+}
+
+/* 评分要点达成：LLM 给了用 LLM 的；否则按维度分 ≥60 推定（演示判定） */
 function pointsAchieved(r) {
   if (!cur.rubric) return null;
   if (Array.isArray(r.points_achieved_llm) && r.points_achieved_llm.length === cur.rubric.length)
-    return r.points_achieved_llm.map(Boolean);
-  return cur.rubric.map((rb) => (r.dims[rb.dimension] || 0) >= 60);
+    return r.points_achieved_llm.map(normPoint);
+  return cur.rubric.map((rb) => ({ ok: (r.dims[rb.dimension] || 0) >= 60, note: "演示判定" }));
 }
 
 /* 演示判定：哪些可追问要点还没被覆盖 */
@@ -1050,6 +1048,26 @@ function watchIdle() {
 }
 
 /* LLM：找遗漏要点 + 用角色口吻生成追问 */
+/* 从模型输出里提取首个完整 JSON 对象（括号配平，容忍前后杂字/重复输出） */
+function extractJson(txt) {
+  const start = txt.indexOf("{");
+  if (start < 0) throw new Error("返回非 JSON");
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < txt.length; i++) {
+    const c = txt[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === "{") depth++;
+    else if (c === "}") { depth--; if (depth === 0) return txt.slice(start, i + 1); }
+  }
+  throw new Error("返回非 JSON");
+}
+
 async function llmEval(cfg) {
   const pts = cur.rubric.map((r, i) => `${i}.${r.dimension}:${r.text}`).join("；");
   const convo = peerLines.map((t, i) => `${cur.char_name}：${t}\n你：${answers[i] ?? ""}`).join("\n");
@@ -1076,9 +1094,7 @@ ${convo}
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
-  const m = (data.choices?.[0]?.message?.content || "").match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("返回非 JSON");
-  const p = JSON.parse(m[0]);
+  const p = JSON.parse(extractJson(data.choices?.[0]?.message?.content || ""));
   return {
     missed: (Array.isArray(p.missed) ? p.missed : []).map(Number).filter((i) => i >= 0 && i < cur.rubric.length),
     followup: String(p.followup || "").slice(0, 60),
@@ -1087,13 +1103,23 @@ ${convo}
 }
 
 /* ---------- 本地演示评分 ---------- */
+/* 演示降级：按红线文本猜命中下标（真实命中判定由 LLM 给 redline_hits） */
+const RL_ATTACK_RE = /指责|攻击|戳穿|硬顶|撕|威胁|逼问|嗓门|嘲讽|抱怨|骂|顶撞|翻脸|黑脸|拱火/;
+const RL_SILENT_RE = /不吭声|沉默|默认|装死|隐瞒|淡化|一句不吭|两个字|没下文/;
+function demoRedlineHits(s, re) {
+  const rl = s.red_lines || [];
+  if (!rl.length) return [];
+  const hits = rl.map((l, i) => (re.test(l) ? i : -1)).filter((i) => i >= 0);
+  return hits.length ? hits : [0];
+}
+
 function localScore(s, ans, timeout) {
   const a = ans || "";
   const len = a.length;
   if (timeout && len === 0)
     return { total: 12, dims: { 看懂: 10, 说对: 10, 办成: 10, 稳住: 30 },
       feedback: "时间到了，你一句话都没说。沉默在这种场合就是认输。",
-      redline_hit: true, demo: true };
+      redline_hit: true, redline_hits: demoRedlineHits(s, RL_SILENT_RE), demo: true };
 
   const has = (...kws) => kws.some((k) => a.includes(k));
   const dims = {
@@ -1108,8 +1134,10 @@ function localScore(s, ans, timeout) {
   const hitWords = ATTACK.filter((k) => a.includes(k));
   if (hitWords.length) dims.稳住 = 15;
 
-  let redline_hit = hitWords.length > 0;
-  if (!redline_hit && len > 0 && len < 8) redline_hit = true;
+  let redline_hits = [];
+  if (hitWords.length) redline_hits = demoRedlineHits(s, RL_ATTACK_RE);
+  else if (len > 0 && len < 8) redline_hits = demoRedlineHits(s, RL_SILENT_RE);
+  const redline_hit = redline_hits.length > 0;
 
   let total = 0;
   for (const rb of s.rubric) total += (dims[rb.dimension] || 50) * rb.weight;
@@ -1120,7 +1148,7 @@ function localScore(s, ans, timeout) {
     feedback: len < 8 && len > 0
       ? "一句话太短了——对方没法接，场面已经冷掉。（演示评分）"
       : `演示评分：命中 ${["记录","邮件","数据","方案","您"].filter((k)=>a.includes(k)).length} 个要点词。配置大模型后可获得逐条点评。（我的 → 大模型设置）`,
-    redline_hit, demo: true };
+    redline_hit, redline_hits, demo: true };
 }
 
 /* ---------- 大模型评分 ---------- */
@@ -1141,11 +1169,11 @@ async function llmScore(cfg, s, ans, timeout) {
 【用户目标】${s.goal}
 【弦外之音】${s.subtext}
 【评分维度（按权重）】${s.rubric.map((r) => `${r.dimension}(${Math.round(r.weight * 100)}%):${r.text}`).join("；")}
-【红线】${s.red_lines.join("；")}
+【红线（下标从 0 开始）】${s.red_lines.map((l, i) => `${i}.${l}`).join("；")}
 【用户回答】${timeout && !ans ? "（超时未作答）" : ans}
 
-只输出 JSON，不要任何多余文字：
-{"total":0-100整数,"dims":{"看懂":0-100,"说对":0-100,"办成":0-100,"稳住":0-100},"feedback":"80字内犀利具体的点评，指出最关键的一处得失","redline_hit":true或false,"points_achieved":[按评分要点顺序逐条true或false],"rewritten_text":"把用户第1轮回答改写成≤60字的高分版本，口语、可直接照说"}`;
+只输出 JSON，不要任何多余文字。redline_hits 和 points_achieved 必填，points_achieved 条数必须与评分要点一致：
+{"total":0-100整数,"dims":{"看懂":0-100,"说对":0-100,"办成":0-100,"稳住":0-100},"feedback":"80字内犀利具体的点评，指出最关键的一处得失","redline_hits":[命中的红线下标整数，没命中给[]],"points_achieved":[{"ok":true或false,"note":"≤15字具体原因，没达成写差在哪，达成写做对了什么"}],"rewritten_text":"把用户第1轮回答改写成≤60字的高分版本，口语、可直接照说"}`;
 
   const res = await fetch(`${cfg.base.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
@@ -1160,15 +1188,17 @@ async function llmScore(cfg, s, ans, timeout) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
   const txt = data.choices?.[0]?.message?.content || "";
-  const m = txt.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("返回非 JSON");
-  const p = JSON.parse(m[0]);
+  const p = JSON.parse(extractJson(txt));
+  const rlLen = (s.red_lines || []).length;
+  const redline_hits = (Array.isArray(p.redline_hits) ? p.redline_hits : (p.redline_hit ? [0] : []))
+    .map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < rlLen);
   return {
     total: Math.round(Math.min(100, Math.max(0, +p.total || 0))),
     dims: { 看懂: +p.dims?.看懂 || 0, 说对: +p.dims?.说对 || 0, 办成: +p.dims?.办成 || 0, 稳住: +p.dims?.稳住 || 0 },
     feedback: String(p.feedback || ""),
-    redline_hit: !!p.redline_hit,
-    points_achieved_llm: Array.isArray(p.points_achieved) ? p.points_achieved.map((x) => !!x) : null,
+    redline_hit: redline_hits.length > 0,
+    redline_hits,
+    points_achieved_llm: Array.isArray(p.points_achieved) ? p.points_achieved.map(normPoint) : null,
     rewritten_text: String(p.rewritten_text || "").slice(0, 120),
     demo: false,
   };
@@ -1249,7 +1279,9 @@ async function showResult(r) {
   const expr = scoreToExpr(r.total, r.redline_hit);
   setChar(expr);
 
-  $("result-scene").textContent = `${cur.id} · ${cur.title}`;
+  const nToday = Math.min(5, new Set(getAttempts()
+    .filter((a) => dayKey(a.ts) === dayKey(Date.now())).map((a) => a.id)).size);
+  $("result-scene").textContent = `${cur.id} · ${cur.title} · 今日 ${nToday}/5`;
   $("score").textContent = r.total;
   const seal = $("seal-tag");
   seal.textContent = sealLabel(r.total, r.redline_hit);
@@ -1258,20 +1290,20 @@ async function showResult(r) {
   $("one-comment").textContent = r.feedback || "";
   $("comment-ai").classList.toggle("hidden", !!r.demo);
   document.querySelector("#result .ai-note").classList.toggle("hidden", !!r.demo);
-  $("inner-voice").textContent = (cur.reactions && cur.reactions[REACTION_KEY[expr]]) || "……";
-  $("dims").innerHTML = ["看懂", "说对", "办成", "稳住"]
-    .map((d) => `<div><b>${Math.round(r.dims[d] ?? 0)}</b>${d}</div>`).join("");
 
-  // 评分要点 ✓/×（图标+文字，不只红绿——硬规则6）
+  // 评分要点 ✓/× + 达成原因（图标+文字，不只红绿——硬规则6）
   if (cur.rubric && r.points_achieved) {
-    const ach = r.points_achieved.filter(Boolean).length;
+    const pts = r.points_achieved.map(normPoint);
+    const ach = pts.filter((p) => p.ok).length;
     $("rubric-ach").textContent = `达成 ${ach}/${cur.rubric.length}`;
     $("rubric-list").innerHTML = cur.rubric.map((rb, i) => {
-      const ok = !!r.points_achieved[i];
-      return `<li class="${ok ? "ok" : "no"}">
-        <span class="ico">${ok ? "✓" : "✕"}</span>
-        <span class="txt">${rb.text}</span>
-        <span class="dim">${rb.dimension}</span>
+      const p = pts[i] || { ok: false, note: "" };
+      return `<li class="${p.ok ? "ok" : "no"}">
+        <span class="ico">${p.ok ? "✓" : "✕"}</span>
+        <span class="pt-body">
+          <span class="txt">${rb.text}</span>
+          ${p.note ? `<span class="pt-note"><b>${p.ok ? "达成" : "未达成"}</b> · ${escapeHtml(p.note)}</span>` : ""}
+        </span>
       </li>`;
     }).join("");
   } else {
@@ -1279,12 +1311,14 @@ async function showResult(r) {
     $("rubric-list").innerHTML = "";
   }
 
-  // 雷区
-  const hitRl = r.redline_hit;
-  $("redline-card").classList.toggle("hidden", !hitRl && !(cur.red_lines || []).length);
-  $("redline-card").querySelector("h3").textContent = hitRl ? "⚠ 雷区命中" : "雷区（这次没踩）";
-  $("redline-list").classList.toggle("safe", !hitRl);
-  $("redline-list").innerHTML = (cur.red_lines || []).map((l) => `<li>${l}</li>`).join("");
+  // 雷区：有命中才显示红卡，未命中整卡隐藏
+  const rl = cur.red_lines || [];
+  const rlHits = (Array.isArray(r.redline_hits) ? r.redline_hits : (r.redline_hit ? [0] : []))
+    .map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < rl.length);
+  $("redline-card").classList.toggle("hidden", rlHits.length === 0);
+  $("redline-n").textContent = rlHits.length ? `${rlHits.length} 处` : "";
+  $("redline-chips").innerHTML = rlHits
+    .map((i) => `<span class="rl-chip"><i>✕</i>${escapeHtml(rl[i])}</span>`).join("");
 
   // 语音指标（打字局为 null）
   const v = r.voice;
@@ -1319,32 +1353,22 @@ async function showResult(r) {
     $("rewrite-card").classList.add("hidden");
   }
 
-  // 对话回顾
-  $("rounds").innerHTML = answers.length > 1
-    ? `<h3>对话回顾 · ${answers.length} 轮</h3>` + answers.map((a, i) => `
-      <div class="rd">
-        <div class="rd-peer">${cur.char_name}：${peerLines[i] || ""}</div>
-        <div class="rd-me">你：${a || "（没开口）"}</div>
-        ${roundNotes[i] ? `<div class="rd-note">${roundNotes[i]}</div>` : ""}
-      </div>`).join("")
-    : "";
-
   // 潜台词揭晓
   $("subtext-body").textContent = cur.subtext || "";
   $("subtext-body").classList.add("hidden");
   $("btn-reveal").classList.remove("hidden");
 
-  // 高分示范（提交后才拿到的 reveals）
+  // 高分示范 · 3版横滑卡（提交后才拿到的 reveals）
   $("strategies").innerHTML = (cur.strategies || []).map((st, i) => `
     <div class="stg">
-      <span class="stg-type">${st.type}</span>
+      <div class="stg-head">
+        <span class="stg-type">${st.type}</span>
+        <button class="stg-listen" type="button" data-i="${i}" aria-label="听一遍${st.type}版">${ICO_SPEAKER}听一遍</button>
+      </div>
       <div class="stg-reply">${st.reply}</div>
-      <div class="stg-react">可能反应：${st.likely_reaction}</div>
-      <div class="stg-risk">注意：${st.risk_note}</div>
-      <button class="stg-copy" data-i="${i}">复制</button>
     </div>`).join("");
-  document.querySelectorAll(".stg-copy").forEach((b) =>
-    b.addEventListener("click", () => copyText(cur.strategies[+b.dataset.i].reply, b)));
+  document.querySelectorAll(".stg-listen").forEach((b) =>
+    b.addEventListener("click", () => speakStrategy(cur.strategies[+b.dataset.i].reply, b)));
 
   $("mistake-note").classList.toggle("hidden", !(r.redline_hit || r.total < 60));
   $("result").classList.remove("hidden");
@@ -1359,7 +1383,24 @@ function bindGlobal() {
   });
   document.querySelectorAll("#tabbar button").forEach((b) =>
     b.addEventListener("click", () => showTab(b.dataset.tab)));
-  $("mp-entry").addEventListener("click", () => showTab("mouthpiece"));
+  /* 嘴替快捷输入：回车预填 / 语音 / 截图 */
+  $("mp-quick").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const v = $("mp-quick").value.trim();
+    showTab("mouthpiece");
+    if (v) $("mp-input").value = v;
+    $("mp-quick").value = "";
+    $("mp-input").focus();
+  });
+  $("mp-quick-mic").addEventListener("click", () => {
+    showTab("mouthpiece");
+    $("btn-mp-mic").click();
+  });
+  $("mp-quick-shot").addEventListener("click", () => {
+    showTab("mouthpiece");
+    $("mp-shot").click();
+  });
   $("battle-go").addEventListener("click", () => showTab("home"));
   $("btn-today-go").addEventListener("click", () => {
     const due = dueMistakes();
@@ -1395,6 +1436,7 @@ function bindGlobal() {
     phase = "idle";
   });
   $("btn-home").addEventListener("click", () => {
+    stopSpeaking();
     clearInterval(idleId);
     $("result").classList.add("hidden");
     $("play").classList.add("hidden");
@@ -1436,6 +1478,7 @@ function bindGlobal() {
     $("btn-reveal").classList.add("hidden");
   });
   $("btn-retry").addEventListener("click", () => {
+    stopSpeaking();
     $("result").classList.add("hidden");
     $("answer").value = "";
     showOnly(null);
@@ -1577,11 +1620,11 @@ function demoMouth(text) {
 async function llmMouth(cfg, text, extra, img) {
   const lib = scenes.map((s) => `${s.id} ${s.title}`).join("；");
   const sys = `你是资深职场话术教练。用户收到一段话，要三种可直接照发的回复策略。
-【对方身份】${$("mp-who").value} 【用户目的】${$("mp-goal").value}
+【对方身份】${$("mp-who").value} 【场合】${$("mp-occasion").value} 【用户目的】${$("mp-goal").value}
 【对方原话】${text || "（见聊天截图，先读出图里对方最后说的那段话作为原话）"}
-${extra ? `【用户补充背景】${extra}\n` : ""}要求：三种策略依次为稳妥、推进、守边界；reply ≤80字、口语、能直接照发；risk ≤20字写清代价；tip 是给用户的一句关键提醒 ≤40字。
+${extra ? `【用户补充背景】${extra}\n` : ""}要求：三种策略依次为稳妥、得体、硬气；reply ≤80字、口语、能直接照发；fit ≤20字，说明这条适合什么情况；tip 是给用户的一句关键提醒 ≤40字。
 再从场景库里挑最像的一幕（都不像就空字符串）：${lib}
-只输出 JSON：{"replies":[{"type":"稳妥","reply":"...","risk":"..."},{"type":"推进","reply":"...","risk":"..."},{"type":"守边界","reply":"...","risk":"..."}],"scene":"S14","tip":"..."}`;
+只输出 JSON：{"replies":[{"type":"稳妥","reply":"...","fit":"..."},{"type":"得体","reply":"...","fit":"..."},{"type":"硬气","reply":"...","fit":"..."}],"scene":"S14","tip":"..."}`;
   const call = async (content) => {
     const res = await fetch(`${cfg.base.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
@@ -1595,11 +1638,9 @@ ${extra ? `【用户补充背景】${extra}\n` : ""}要求：三种策略依次�
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    const m = (data.choices?.[0]?.message?.content || "").match(/\{[\s\S]*\}/);
-    if (!m) throw new Error("返回非 JSON");
-    const p = JSON.parse(m[0]);
+    const p = JSON.parse(extractJson(data.choices?.[0]?.message?.content || ""));
     const replies = (Array.isArray(p.replies) ? p.replies : []).slice(0, 3)
-      .map((r) => ({ type: String(r.type || "策略"), reply: String(r.reply || ""), risk: String(r.risk || "") }));
+      .map((r) => ({ type: String(r.type || "策略"), reply: String(r.reply || ""), fit: String(r.fit || r.risk || "") }));
     if (replies.length !== 3 || replies.some((r) => !r.reply)) throw new Error("回复不足三条");
     return { scene: scenes.find((x) => x.id === String(p.scene || "")) || null, replies, tip: String(p.tip || "") };
   };
@@ -1635,10 +1676,38 @@ function copyText(t, btn) {
     navigator.clipboard.writeText(t).then(done).catch(() => {});
 }
 
+/* 高分示范「听一遍」：speechSynthesis 朗读，再点停止 */
+const ICO_SPEAKER = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>';
+let listenBtn = null;
+function resetListenBtn(b) {
+  if (b) { b.classList.remove("on"); b.innerHTML = ICO_SPEAKER + "听一遍"; }
+}
+function stopSpeaking() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  resetListenBtn(listenBtn);
+  listenBtn = null;
+}
+function speakStrategy(text, btn) {
+  if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+    btn.textContent = "此设备不支持朗读";
+    setTimeout(() => resetListenBtn(btn), 1800);
+    return;
+  }
+  if (listenBtn === btn) { stopSpeaking(); return; }
+  stopSpeaking();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "zh-CN";
+  listenBtn = btn;
+  btn.classList.add("on");
+  btn.innerHTML = ICO_SPEAKER + "停止";
+  u.onend = u.onerror = () => { resetListenBtn(btn); if (listenBtn === btn) listenBtn = null; };
+  window.speechSynthesis.speak(u);
+}
+
 /* 7.5 嘴替结果 */
 function renderMp(scene, replies, demo, imgFallback, tip, origText) {
   const out = $("mp-out");
-  const who = $("mp-who").value, goal = $("mp-goal").value;
+  const who = $("mp-who").value, goal = $("mp-goal").value, occasion = $("mp-occasion").value;
   const cards = replies.map((r, i) => `
     <div class="mp-reply">
       <div class="rp-head">
@@ -1646,13 +1715,22 @@ function renderMp(scene, replies, demo, imgFallback, tip, origText) {
         <button class="rp-copy" data-i="${i}">复制</button>
       </div>
       <div class="rp-text">${r.reply}</div>
-      <div class="rp-fit"><b>适合</b>${r.risk || r.risk_note || "大多数情况"}</div>
+      <div class="rp-fit"><b>适合</b>　${r.fit || r.risk || r.risk_note || "大多数情况"}</div>
     </div>`).join("");
   out.innerHTML =
-    (origText ? `<div class="mp-orig"><span class="cap">你遇到的</span><div class="txt">${escapeHtml(origText)}</div></div>` : "")
-    + `<div class="mp-chips">
-        <button class="mp-chip" data-f="mp-who"><b>对方</b>${who} ✎</button>
-        <button class="mp-chip" data-f="mp-goal"><b>目标</b>${goal} ✎</button>
+    (origText ? `<div class="mp-orig"><span class="cap">你遇到的</span><div class="txt">${escapeHtml(origText)}</div>
+      <div class="mp-reinput"><span>重新输入</span>
+        <button type="button" data-f="mp-input">✎ 文字</button>
+        <button type="button" data-f="btn-mp-mic">🎤 语音</button>
+        <button type="button" data-f="mp-shot-label">📷 截图</button>
+      </div>
+      <p class="mp-shot-hint">截图提示：上传前请遮挡他人姓名和头像</p>
+    </div>` : "")
+    + `<p class="mp-chips-cap">识别出的情况 · 点一下可改</p>
+      <div class="mp-chips">
+        <button class="mp-chip" data-f="mp-who"><b>对方：</b>${who} ✎</button>
+        <button class="mp-chip" data-f="mp-occasion"><b>场合：</b>${occasion} ✎</button>
+        <button class="mp-chip" data-f="mp-goal"><b>你的目标：</b>${goal} ✎</button>
       </div>`
     + `<div class="mp-sec">三版回复${demo ? "" : '<span class="ai-tag">AI 生成</span>'}</div>`
     + (scene ? `<p class="mp-match">这场面像「${scene.id} · ${scene.title}」${demo ? "（场景库匹配）" : ""}</p>` : "")
@@ -1663,11 +1741,17 @@ function renderMp(scene, replies, demo, imgFallback, tip, origText) {
     + (scene ? `<button id="mp-practice">用你的嘴练一遍（${scene.time_limit_s} 秒）›</button>` : "");
   out.querySelectorAll(".rp-copy").forEach((b) =>
     b.addEventListener("click", () => copyText(replies[+b.dataset.i].reply, b)));
+  const focusCtl = (id) => {
+    const t = $(id);
+    $("mouthpiece").scrollTo({ top: 0, behavior: "smooth" });
+    if (!t) return;
+    if (!/^(INPUT|TEXTAREA|BUTTON|SELECT)$/.test(t.tagName)) t.tabIndex = -1;
+    t.focus({ preventScroll: true });
+  };
   out.querySelectorAll(".mp-chip").forEach((b) =>
-    b.addEventListener("click", () => {
-      $(b.dataset.f).focus();
-      $("mouthpiece").scrollTo({ top: 0, behavior: "smooth" });
-    }));
+    b.addEventListener("click", () => focusCtl(b.dataset.f)));
+  out.querySelectorAll(".mp-reinput button").forEach((b) =>
+    b.addEventListener("click", () => focusCtl(b.dataset.f)));
   if (scene) {
     const pb = $("mp-practice");
     if (pb) pb.addEventListener("click", () => {
