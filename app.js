@@ -6,6 +6,9 @@ const $ = (id) => document.getElementById(id);
 window.addEventListener("error", (e) => { document.title = "ERR:" + e.message; });
 
 const EXPR = ["smile", "calm", "thinking", "awkward", "displeased"];
+const REACTION_KEY = {
+  smile: "满意", calm: "平静", thinking: "思考", awkward: "尴尬", displeased: "不悦",
+};
 
 let scenes = [];
 let reveals = null;    // 隐藏数据：提交后才 fetch（硬规则1：作答前不下发）
@@ -159,8 +162,17 @@ function renderToday() {
   document.querySelectorAll(".tsc").forEach((el) =>
     el.addEventListener("click", () => openScene(+el.dataset.i)));
 
-  // 继续实战：最近一次练过的幕（多轮未实现，进度=今日该幕已练次数，封顶 5）
-  if (log.length) {
+  // 继续实战：进行中的多轮 session 优先（真实进度），否则最近一次单轮
+  const mrs = getMrSession();
+  if (mrs) {
+    $("continue-card").classList.remove("hidden");
+    $("continue-bg").src = "assets/bg_meeting_9x16.jpg";
+    $("continue-title").textContent = mrs.title || "周一晨会：被当众问业绩";
+    const n = Math.min(5, (mrs.answers || []).length);
+    document.querySelectorAll("#continue-segs i").forEach((el, i) => el.classList.toggle("on", i < n));
+    $("continue-sub").textContent = `进度 ${n}/5`;
+    $("continue-card").onclick = () => mrStart();
+  } else if (log.length) {
     const last = log[0];
     const s = scenes.find((x) => x.id === last.id);
     if (s) {
@@ -171,6 +183,8 @@ function renderToday() {
       document.querySelectorAll("#continue-segs i").forEach((el, i) => el.classList.toggle("on", i < n));
       $("continue-sub").textContent = `进度 ${n}/5`;
       $("continue-card").onclick = () => openScene(scenes.indexOf(s));
+    } else {
+      $("continue-card").classList.add("hidden");
     }
   } else {
     $("continue-card").classList.add("hidden");
@@ -204,6 +218,30 @@ function renderToday() {
   $("level-next").innerHTML = lv.next
     ? `再得 <b>${lv.next.at - pts}</b> 嘴力值<br>升到${lv.next.name}`
     : "已是最高等级";
+
+  renderSceneAdmin();
+}
+
+/* 全部场景：仅管理员可见（sessionStorage.ruxi_admin=1），默认 DOM 里不存在 */
+function renderSceneAdmin() {
+  let wrap = $("scene-admin");
+  if (sessionStorage.getItem("ruxi_admin") !== "1") {
+    if (wrap) wrap.remove();
+    return;
+  }
+  if (!wrap) {
+    wrap = document.createElement("div");
+    wrap.id = "scene-admin";
+    $("home").appendChild(wrap);
+  }
+  wrap.innerHTML = `<h3 class="sec">全部场景</h3><div id="scene-list">` + scenes.map((s, i) => `
+    <button class="scene-item" style="background-image:url('assets/${s.bg}')" data-i="${i}">
+      <div class="veil"></div>
+      <div class="txt"><b>${s.id} · ${s.title}</b><span>${s.tag}</span></div>
+      <div class="diff">${"★".repeat(s.difficulty)}</div>
+    </button>`).join("") + `</div>`;
+  wrap.querySelectorAll(".scene-item").forEach((el) =>
+    el.addEventListener("click", () => openScene(+el.dataset.i)));
 }
 
 /* ---------- 底部导航 ---------- */
@@ -215,6 +253,13 @@ function showTab(name) {
   if (name === "home") renderToday();
   if (name === "progress") renderProgress();
   if (name === "me") renderMe();
+  if (name === "battle") {
+    const mrs = getMrSession();
+    $("battle-entry-sub").textContent = mrs
+      ? `进行中 · 进度 ${Math.min(5, (mrs.answers || []).length)}/5 · 点我接着练`
+      : "多轮实战 · 5 轮 · 进行中不亮分，结束一起复盘";
+  }
+  updateMpBar();
 }
 
 /* ---------- 练习记录 ---------- */
@@ -274,6 +319,7 @@ function renderProgress() {
     }).join("");
     document.querySelectorAll(".hist-item").forEach((el) =>
       el.addEventListener("click", () => {
+        if (el.dataset.id === "M1") { mrStart(); return; }
         const i = scenes.findIndex((s) => s.id === el.dataset.id);
         if (i >= 0) openScene(i);
       }));
@@ -282,7 +328,8 @@ function renderProgress() {
   const mks = getMistakes();
   $("no-mistake").classList.toggle("hidden", mks.length > 0);
   $("mistake-list").innerHTML = mks.map((m) => {
-    const s = scenes.find((x) => x.id === m.scene_id);
+    const s = scenes.find((x) => x.id === m.scene_id)
+      || (m.scene_id === "M1" ? { id: "M1", title: "周一晨会：被当众问业绩 · 多轮" } : null);
     if (!s) return "";
     const days = Math.ceil((m.next_review - Date.now()) / 864e5);
     const due = days <= 0;
@@ -293,6 +340,7 @@ function renderProgress() {
   }).join("");
   document.querySelectorAll(".mk-item .go").forEach((el) =>
     el.addEventListener("click", () => {
+      if (el.dataset.id === "M1") { mrStart(); return; }
       const i = scenes.findIndex((s) => s.id === el.dataset.id);
       if (i >= 0) openScene(i);
     }));
@@ -321,7 +369,9 @@ function openScene(i) {
   for (const t of TABS) $(t).classList.add("hidden");
   $("tabbar").classList.add("hidden");
   $("result").classList.add("hidden");
+  $("mp-bar").classList.add("hidden");
   $("play").classList.remove("hidden");
+  moveRecorderTo("play");
 
   $("bg").src = `assets/${cur.bg}`;
   $("play-title").textContent = `${cur.id} · ${cur.title}`;
@@ -333,6 +383,9 @@ function openScene(i) {
   $("chips").innerHTML = chips.map((c) => `<span class="chip">${c}</span>`).join("")
     + `<span class="chip gold">难度 ${"★".repeat(cur.difficulty)}</span>`
     + `<span class="chip gold">限时 ${cur.time_limit_s} 秒</span>`;
+  $("brief-body").innerHTML = (cur.brief || [])
+    .map((b) => `<p><b>${b.label}</b>${b.text}</p>`).join("");
+  $("brief-card").open = false;
   $("goal-line").innerHTML = `<b>目标</b>　${cur.goal}`;
   $("answer").value = "";
   $("input-bar").classList.add("hidden");
@@ -368,6 +421,7 @@ function typewrite(text, done) {
 }
 
 function setChar(expr, instant) {
+  if (!cur || !cur.char) return;
   if (!EXPR.includes(expr)) expr = "calm";
   curExpr = expr;
   const img = $("char");
@@ -385,6 +439,7 @@ function startTimer(sec) {
   el.classList.remove("hidden", "urgent");
   el.textContent = left;
   timerId = setInterval(() => {
+    if ($("brief-card").open) return;
     el.textContent = --left;
     if (left <= 10) el.classList.add("urgent");
     if (left <= 0) {
@@ -729,6 +784,7 @@ async function uploadAudio(ef) {
 
 function doVoiceSubmit(transcript) {
   $("answer").value = transcript;
+  if (mrActive) { mrSubmit(false); return; }
   if (round === 1) {
     voiceTakes.push({ timings: Object.assign({}, recGet().timings), transcript });
   }
@@ -1281,6 +1337,7 @@ async function showResult(r) {
 
   const nToday = Math.min(5, new Set(getAttempts()
     .filter((a) => dayKey(a.ts) === dayKey(Date.now())).map((a) => a.id)).size);
+  document.querySelector("#result-nav b").textContent = cur.id === "M1" ? "多轮复盘" : "单轮结果";
   $("result-scene").textContent = `${cur.id} · ${cur.title} · 今日 ${nToday}/5`;
   $("score").textContent = r.total;
   const seal = $("seal-tag");
@@ -1290,6 +1347,10 @@ async function showResult(r) {
   $("one-comment").textContent = r.feedback || "";
   $("comment-ai").classList.toggle("hidden", !!r.demo);
   document.querySelector("#result .ai-note").classList.toggle("hidden", !!r.demo);
+  const iv = (cur.reactions && cur.reactions[REACTION_KEY[expr]]) || "";
+  const ivEmpty = !iv || /^[…\.\s]*$/.test(iv);
+  $("inner-voice").textContent = ivEmpty ? "" : iv;
+  $("inner-voice").classList.toggle("hidden", ivEmpty);
 
   // 评分要点 ✓/× + 达成原因（图标+文字，不只红绿——硬规则6）
   if (cur.rubric && r.points_achieved) {
@@ -1353,7 +1414,8 @@ async function showResult(r) {
     $("rewrite-card").classList.add("hidden");
   }
 
-  // 潜台词揭晓
+  // 潜台词揭晓（多轮无 reveals 则整卡跳过）
+  $("subtext-card").classList.toggle("hidden", !cur.subtext);
   $("subtext-body").textContent = cur.subtext || "";
   $("subtext-body").classList.add("hidden");
   $("btn-reveal").classList.remove("hidden");
@@ -1401,7 +1463,21 @@ function bindGlobal() {
     showTab("mouthpiece");
     $("mp-shot").click();
   });
-  $("battle-go").addEventListener("click", () => showTab("home"));
+  $("battle-entry").addEventListener("click", () => mrStart());
+  $("mr-exit").addEventListener("click", () => $("mr-exit-gate").classList.remove("hidden"));
+  $("mr-exit-cancel").addEventListener("click", () => $("mr-exit-gate").classList.add("hidden"));
+  $("mr-exit-ok").addEventListener("click", () => {
+    clearInterval(mr && mr.timerId);
+    recSend({ type: "RESET" });
+    mrSave();
+    mrActive = false; mr = null;
+    $("mr-exit-gate").classList.add("hidden");
+    $("battle-play").classList.add("hidden");
+    showOnly(null);
+    $("tabbar").classList.remove("hidden");
+    showTab("home");
+    phase = "idle";
+  });
   $("btn-today-go").addEventListener("click", () => {
     const due = dueMistakes();
     if (due.length) {
@@ -1413,6 +1489,27 @@ function bindGlobal() {
     openScene(fresh >= 0 ? fresh : getAttempts().length % scenes.length);
   });
   $("me-settings").addEventListener("click", () => $("settings").classList.remove("hidden"));
+  /* 管理入口：验证通过才在今日页渲染全部场景 */
+  $("me-admin").addEventListener("click", () => {
+    $("admin-code").value = "";
+    $("admin-err").classList.add("hidden");
+    $("admin-gate").classList.remove("hidden");
+    setTimeout(() => $("admin-code").focus(), 50);
+  });
+  const tryAdmin = () => {
+    if ($("admin-code").value === (window.MVP_ADMIN_CODE || "ruxi2026")) {
+      sessionStorage.setItem("ruxi_admin", "1");
+      $("admin-gate").classList.add("hidden");
+      showTab("home");
+      renderSceneAdmin();
+      $("home").scrollTo({ top: 99999, behavior: "smooth" });
+    } else {
+      $("admin-err").classList.remove("hidden");
+    }
+  };
+  $("admin-ok").addEventListener("click", tryAdmin);
+  $("admin-code").addEventListener("keydown", (e) => { if (e.key === "Enter") tryAdmin(); });
+  $("admin-cancel").addEventListener("click", () => $("admin-gate").classList.add("hidden"));
   $("me-about").addEventListener("click", () =>
     alert("入戏 · 职场情景对练 v0.3（A 剧场版）\n模型：DeepSeek（自配或内置代理）\n备案号：占位（待补充）\n本地演示版：练习数据只存在这台设备上。"));
   $("me-clear").addEventListener("click", () => {
@@ -1444,9 +1541,9 @@ function bindGlobal() {
     showTab("home");
     phase = "idle";
   });
-  $("btn-send").addEventListener("click", () => submit(false));
+  $("btn-send").addEventListener("click", () => (mrActive ? mrSubmit(false) : submit(false)));
   $("answer").addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(false); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); mrActive ? mrSubmit(false) : submit(false); }
   });
   $("answer").addEventListener("input", () => { lastType = Date.now(); });
 
@@ -1479,6 +1576,12 @@ function bindGlobal() {
   });
   $("btn-retry").addEventListener("click", () => {
     stopSpeaking();
+    if (cur && cur.id === "M1") {
+      $("result").classList.add("hidden");
+      phase = "idle";
+      mrStart();
+      return;
+    }
     $("result").classList.add("hidden");
     $("answer").value = "";
     showOnly(null);
@@ -1496,7 +1599,17 @@ function bindGlobal() {
       watchIdle();
     });
   });
-  $("btn-next").addEventListener("click", () => openScene((curIdx + 1) % scenes.length));
+  $("btn-next").addEventListener("click", () => {
+    if (cur && cur.id === "M1") {
+      stopSpeaking();
+      $("result").classList.add("hidden");
+      $("tabbar").classList.remove("hidden");
+      showTab("home");
+      phase = "idle";
+      return;
+    }
+    openScene((curIdx + 1) % scenes.length);
+  });
   $("cfg-close").addEventListener("click", () => $("settings").classList.add("hidden"));
   $("cfg-save").addEventListener("click", saveCfg);
   setupRecogMp();
@@ -1575,8 +1688,9 @@ async function mpGo() {
   const out = $("mp-out");
   const cfg = getCfg();
   const hasLlm = cfg && cfg.key;
-  if (!text && !mpImg) { out.innerHTML = '<p class="empty-note">先把对方的原话粘进来，或上传聊天截图。</p>'; return; }
-  if (!text && mpImg && !hasLlm) { out.innerHTML = '<p class="empty-note">演示模式读不了图——把图里对方那句话打在上面，或去「我的 → 大模型设置」配个能看图的模型。</p>'; return; }
+  const bail = (html) => { mpPracticeScene = null; updateMpBar(); out.innerHTML = html; };
+  if (!text && !mpImg) return bail('<p class="empty-note">先把对方的原话粘进来，或上传聊天截图。</p>');
+  if (!text && mpImg && !hasLlm) return bail('<p class="empty-note">演示模式读不了图——把图里对方那句话打在上面，或去「我的 → 大模型设置」配个能看图的模型。</p>');
   const btn = $("mp-go");
   btn.disabled = true; btn.textContent = "想…";
   if (hasLlm) {
@@ -1588,14 +1702,14 @@ async function mpGo() {
     } catch (e) { console.warn("LLM 嘴替失败，降级场景匹配：", e); }
   }
   btn.disabled = false; btn.textContent = "给我三种回法";
-  if (!text) { out.innerHTML = '<p class="empty-note">模型没能读懂这张图——把对方那句话打在上面再试。</p>'; return; }
+  if (!text) return bail('<p class="empty-note">模型没能读懂这张图——把对方那句话打在上面再试。</p>');
   await ensureReveals();
   const s = demoMouth(text);
   if (s) {
     const full = Object.assign({}, s, reveals[s.id] || {});
     renderMp(full, full.strategies, true, false, `本幕目标：${full.goal}`, text);
   }
-  else out.innerHTML = '<p class="empty-note">场景库里还没有这一类——配个大模型（我的 → 大模型设置）就能照你的原话定制三种回法；或者去今日页挑一幕相近的练。</p>';
+  else bail('<p class="empty-note">场景库里还没有这一类——配个大模型（我的 → 大模型设置）就能照你的原话定制三种回法；或者去今日页挑一幕相近的练。</p>');
 }
 
 /* 演示模式：用追问关键词 + 台词二字片段，把原话匹配到最像的一幕 */
@@ -1659,9 +1773,10 @@ ${extra ? `【用户补充背景】${extra}\n` : ""}要求：三种策略依次�
 }
 
 function copyText(t, btn) {
+  const orig = btn.dataset.orig || (btn.dataset.orig = btn.innerHTML);
   const done = () => {
     btn.textContent = "已复制 ✓"; btn.classList.add("ok");
-    setTimeout(() => { btn.textContent = "复制"; btn.classList.remove("ok"); }, 1500);
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove("ok"); }, 1500);
   };
   let ok = false;
   try {
@@ -1704,7 +1819,25 @@ function speakStrategy(text, btn) {
   window.speechSynthesis.speak(u);
 }
 
-/* 7.5 嘴替结果 */
+/* 7.5 嘴替结果（逐块对齐 pages/A-theater/05-zuiti-result.html） */
+const ICO_PENCIL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+const ICO_MIC15 = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg>';
+const ICO_IMG15 = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>';
+const ICO_SHIELD = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
+const ICO_COPY = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const ICO_BULB = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>';
+const ICO_MIC20 = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg>';
+
+/* 练习底栏：有匹配场景且在嘴替 tab 时显示 */
+let mpPracticeScene = null;
+function updateMpBar() {
+  const on = !!mpPracticeScene && !$("mouthpiece").classList.contains("hidden");
+  $("mp-bar").classList.toggle("hidden", !on);
+  $("mouthpiece").classList.toggle("has-bar", on);
+  if (mpPracticeScene)
+    $("mp-practice").innerHTML = ICO_MIC20 + `用你的嘴练一遍（${mpPracticeScene.time_limit_s} 秒）`;
+}
+
 function renderMp(scene, replies, demo, imgFallback, tip, origText) {
   const out = $("mp-out");
   const who = $("mp-who").value, goal = $("mp-goal").value, occasion = $("mp-occasion").value;
@@ -1712,33 +1845,33 @@ function renderMp(scene, replies, demo, imgFallback, tip, origText) {
     <div class="mp-reply">
       <div class="rp-head">
         <span class="rp-type">${r.type}</span>
-        <button class="rp-copy" data-i="${i}">复制</button>
+        <button class="rp-copy" data-i="${i}" aria-label="复制${r.type}版">${ICO_COPY}复制</button>
       </div>
       <div class="rp-text">${r.reply}</div>
-      <div class="rp-fit"><b>适合</b>　${r.fit || r.risk || r.risk_note || "大多数情况"}</div>
+      <div class="rp-fit"><span class="fit-lbl">适合</span>　${r.fit || r.risk || r.risk_note || "大多数情况"}</div>
     </div>`).join("");
   out.innerHTML =
-    (origText ? `<div class="mp-orig"><span class="cap">你遇到的</span><div class="txt">${escapeHtml(origText)}</div>
+    (origText ? `<span class="mp-cap">你遇到的</span><div class="mp-orig"><div class="txt">${escapeHtml(origText)}</div>
       <div class="mp-reinput"><span>重新输入</span>
-        <button type="button" data-f="mp-input">✎ 文字</button>
-        <button type="button" data-f="btn-mp-mic">🎤 语音</button>
-        <button type="button" data-f="mp-shot-label">📷 截图</button>
+        <button type="button" data-f="mp-input">${ICO_PENCIL}文字</button>
+        <button type="button" data-f="btn-mp-mic">${ICO_MIC15}语音</button>
+        <button type="button" data-f="mp-shot-label">${ICO_IMG15}截图</button>
       </div>
-      <p class="mp-shot-hint">截图提示：上传前请遮挡他人姓名和头像</p>
+      <p class="mp-shot-hint">${ICO_SHIELD}截图提示：上传前请遮挡他人姓名和头像</p>
     </div>` : "")
     + `<p class="mp-chips-cap">识别出的情况 · 点一下可改</p>
       <div class="mp-chips">
-        <button class="mp-chip" data-f="mp-who"><b>对方：</b>${who} ✎</button>
-        <button class="mp-chip" data-f="mp-occasion"><b>场合：</b>${occasion} ✎</button>
-        <button class="mp-chip" data-f="mp-goal"><b>你的目标：</b>${goal} ✎</button>
+        <button class="mp-chip" data-f="mp-who"><span>对方：</span><b>${who}</b>${ICO_PENCIL}</button>
+        <button class="mp-chip" data-f="mp-occasion"><span>场合：</span><b>${occasion}</b>${ICO_PENCIL}</button>
+        <button class="mp-chip" data-f="mp-goal"><span>你的目标：</span><b>${goal}</b>${ICO_PENCIL}</button>
       </div>`
     + `<div class="mp-sec">三版回复${demo ? "" : '<span class="ai-tag">AI 生成</span>'}</div>`
-    + (scene ? `<p class="mp-match">这场面像「${scene.id} · ${scene.title}」${demo ? "（场景库匹配）" : ""}</p>` : "")
     + cards
-    + (tip ? `<div class="mp-tip"><span class="cap">💡 关键提示</span><p>${escapeHtml(tip)}</p></div>` : "")
+    + (tip ? `<div class="mp-tip"><span class="cap">${ICO_BULB}关键提示</span><p>${escapeHtml(tip)}</p></div>` : "")
     + (imgFallback ? `<p class="empty-note">模型读不了截图，已只按文字信息定制。</p>` : "")
-    + (demo ? `<p class="empty-note">演示匹配基于场景库关键词；配大模型可按原话定制。</p>` : `<p class="ai-note">以上内容由 AI 生成</p>`)
-    + (scene ? `<button id="mp-practice">用你的嘴练一遍（${scene.time_limit_s} 秒）›</button>` : "");
+    + (demo ? `<p class="empty-note">演示匹配基于场景库关键词；配大模型可按原话定制。</p>` : `<p class="ai-note">以上内容由 AI 生成</p>`);
+  mpPracticeScene = scene || null;
+  updateMpBar();
   out.querySelectorAll(".rp-copy").forEach((b) =>
     b.addEventListener("click", () => copyText(replies[+b.dataset.i].reply, b)));
   const focusCtl = (id) => {
@@ -1752,13 +1885,6 @@ function renderMp(scene, replies, demo, imgFallback, tip, origText) {
     b.addEventListener("click", () => focusCtl(b.dataset.f)));
   out.querySelectorAll(".mp-reinput button").forEach((b) =>
     b.addEventListener("click", () => focusCtl(b.dataset.f)));
-  if (scene) {
-    const pb = $("mp-practice");
-    if (pb) pb.addEventListener("click", () => {
-      const i = scenes.findIndex((x) => x.id === scene.id);
-      if (i >= 0) openScene(i);
-    });
-  }
 }
 
 /* 截图上传：压缩到最长边 1024 的 JPEG，供多模态模型读图 */
@@ -1766,6 +1892,11 @@ let mpImg = null;
 
 /* ---------- 嘴替事件绑定（独立于 bindGlobal，元素始终在） ---------- */
 $("mp-go").addEventListener("click", mpGo);
+$("mp-practice").addEventListener("click", () => {
+  if (!mpPracticeScene) return;
+  const i = scenes.findIndex((x) => x.id === mpPracticeScene.id);
+  if (i >= 0) openScene(i);
+});
 $("btn-mp-mic").addEventListener("click", () => {
   if (!recogMp) return;
   if (recogMpOn) { recogMp.stop(); recogMpOn = false; }
@@ -1797,3 +1928,294 @@ $("mp-shot-x").addEventListener("click", () => {
   $("mp-shot-view").classList.add("hidden");
   $("mp-shot-label").classList.remove("hidden");
 });
+
+/* ========== 7.4 多轮实战（剧本骨架 + LLM 措辞变奏，折中方案） ========== */
+const MR_KEY = "ruxi_mr_session";
+let mrData = null;     // multiround.json 的 M1（懒加载）
+let mr = null;         // 进行中的 session 运行时
+let mrActive = false;  // true 时提交路由到 mrSubmit
+
+const ICO_MIC10 = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></svg>';
+
+function getMrSession() {
+  try { return JSON.parse(localStorage.getItem(MR_KEY) || "null"); } catch { return null; }
+}
+function mrSave() {
+  if (!mr) return;
+  localStorage.setItem(MR_KEY, JSON.stringify({
+    sceneId: "M1", title: mr.data.title, roundIdx: mr.roundIdx,
+    rows: mr.rows, answers: mr.answers, lines: mr.lines, ts: Date.now(),
+  }));
+}
+function clearMrSession() { localStorage.removeItem(MR_KEY); }
+
+/* 录音组件在单轮/多轮两个宿主间搬动（监听器随节点走，状态机不变） */
+const REC_HOST_IDS = ["idle-area", "rec-area", "recog-area", "confirm-area", "input-bar", "rec-err", "pre-perm"];
+function moveRecorderTo(hostId) {
+  const host = $(hostId);
+  for (const id of REC_HOST_IDS) host.appendChild($(id));
+  const battle = hostId === "battle-play";
+  $("idle-tip").textContent = battle ? "点一下开始说" : "点一下，开口回答";
+  $("btn-type-instead").textContent = battle ? "或打字回答" : "打字代替 ›";
+}
+
+async function mrStart() {
+  stopSpeaking();
+  if (!mrData) {
+    try { mrData = (await (await fetch("data/multiround.json?v=1")).json()).M1; }
+    catch { alert("场景数据没加载到——检查网络后再点一次。"); return; }
+    if (!mrData) { alert("场景数据没加载到——检查网络后再点一次。"); return; }
+  }
+  const sess = getMrSession();
+  mr = sess && sess.sceneId === "M1" && Array.isArray(sess.rows)
+    ? { data: mrData, roundIdx: sess.roundIdx || 0, rows: sess.rows, answers: sess.answers || [],
+        lines: sess.lines || {}, takes: [], timerId: null, curMeta: null, finishing: false }
+    : { data: mrData, roundIdx: 0, rows: [], answers: [], lines: {}, takes: [], timerId: null,
+        curMeta: null, finishing: false };
+  mrActive = true;
+  for (const t of TABS) $(t).classList.add("hidden");
+  $("tabbar").classList.add("hidden");
+  $("result").classList.add("hidden");
+  $("mp-bar").classList.add("hidden");
+  $("battle-play").classList.remove("hidden");
+  moveRecorderTo("battle-play");
+  showOnly(null);
+  $("mr-bg").src = `assets/${mr.data.bg}`;
+  $("mr-title").textContent = mr.data.title;
+  mrRenderSidebar(null);
+  if (mr.rows.length === 0 && mr.roundIdx === 0) {
+    mr.rows.push({ role: "cameo", name: mr.data.cameo.name, text: mr.data.cameo.line });
+    mrRenderLog();
+    mrSave();
+    setTimeout(() => mr && mrShowRound(0), 700);
+  } else {
+    mrRenderLog();
+    mrShowRound(mr.roundIdx, mr.lines[mr.roundIdx]);
+  }
+}
+
+function mrScroll() {
+  const el = $("mr-log");
+  el.scrollTop = el.scrollHeight;
+}
+
+function mrRowHtml(e) {
+  const t = escapeHtml(e.text);
+  if (e.role === "stage") return `<p class="mrl-stage">（${t}）</p>`;
+  if (e.role === "cameo")
+    return `<div class="mrl mrl-cameo"><span class="mrl-av-dash"></span><span class="mrl-name">${escapeHtml(e.name)}</span><span class="mrl-tag">客串</span><span class="mrl-text">${t}</span></div>`;
+  if (e.role === "user")
+    return `<div class="mrl"><span class="mrl-you">${ICO_MIC10}你</span><span class="mrl-text">${t}</span></div>`;
+  const spk = mr.data.speakers[e.speaker] || {};
+  return `<div class="mrl"><img class="mrl-av" src="assets/${spk.avatar || ""}" alt=""><span class="mrl-name gold">${escapeHtml(e.name)}</span><span class="mrl-text">${t}</span></div>`;
+}
+
+function mrRenderLog() {
+  $("mr-log").innerHTML = mr.rows.map(mrRowHtml).join("");
+  mrScroll();
+}
+
+function mrRenderSidebar(curSpeakerId) {
+  const list = mr.data.present_all.filter((p) => p.character_id !== curSpeakerId);
+  $("mr-present").innerHTML = list.map((p) =>
+    `<li><img src="assets/${p.avatar}" alt=""><span>${p.name}</span></li>`).join("")
+    + `<li class="mr-others">${mr.data.others_present_label}</li>`;
+}
+
+/* 当前台词卡收进记录区（变回单行） */
+function mrCollapseCur() {
+  const card = $("mr-cur-card");
+  if (card) card.remove();
+  if (mr && mr.curMeta) {
+    mr.rows.push(mr.curMeta);
+    mr.curMeta = null;
+    mrRenderLog();
+  }
+}
+
+function mrType(el, text, done) {
+  let i = 0;
+  el.textContent = "";
+  const t = setInterval(() => {
+    el.textContent = text.slice(0, ++i);
+    mrScroll();
+    if (i >= text.length) { clearInterval(t); done && done(); }
+  }, 40);
+}
+
+function mrShowRound(idx, lineOverride) {
+  const rd = mr.data.rounds[idx];
+  if (!rd) { mrFinish(); return; }
+  mrCollapseCur();
+  mr.roundIdx = idx;
+  phase = "typing";
+  showOnly(null);
+  $("mr-turn").classList.add("hidden");
+  const spk = mr.data.speakers[rd.speaker];
+  const line = lineOverride || rd.line;
+  mr.lines[idx] = line;
+  mr.curMeta = { role: "cast", speaker: rd.speaker, name: spk.name, text: line };
+
+  const img = $("mr-char");
+  img.style.opacity = 0;
+  setTimeout(() => { img.src = `assets/${rd.img || spk.avatar}`; img.onload = () => (img.style.opacity = 1); }, 250);
+  $("mr-spk-name").textContent = spk.name;
+  $("mr-spk-title").textContent = `${spk.title} · ${spk.relation}`;
+  $("mr-speaking").classList.remove("hidden");
+  mrRenderSidebar(rd.speaker);
+  $("mr-round-n").textContent = `第 ${rd.round} / ${mr.data.total_rounds} 轮`;
+  document.querySelectorAll("#mr-segs i").forEach((el, i) => {
+    el.className = i < idx ? "done" : i === idx ? "cur" : "";
+  });
+
+  const card = document.createElement("div");
+  card.className = "mrl-cur";
+  card.id = "mr-cur-card";
+  card.innerHTML = `<div class="mrl-cur-head"><img src="assets/${spk.avatar}" alt=""><b>${spk.name}</b>${rd.direction ? `<span class="mrl-dir">（${rd.direction}）</span>` : ""}<span class="mrl-rn">第 ${rd.round} 轮</span></div><p class="mrl-line"></p>`;
+  $("mr-log").appendChild(card);
+  mrScroll();
+  mrSave();
+  mrType(card.querySelector(".mrl-line"), line, () => {
+    if (!mr || mr.roundIdx !== idx) return;
+    if (rd.expects_user_reply) mrUserTurn(rd);
+    else {
+      $("mr-speaking").classList.add("hidden");
+      setTimeout(() => mrFinish(), 1800);   // 收场轮不等人答
+    }
+  });
+}
+
+function mrUserTurn(rd) {
+  phase = "answering";
+  $("mr-speaking").classList.add("hidden");
+  const lim = rd.time_limit_s || 30;
+  $("mr-limit").textContent = lim;
+  $("mr-turn").classList.remove("hidden");
+  left = lim;
+  recSend({ type: "RESET" });
+  recSend({ type: "LINE_SHOWN", at: Date.now() });
+  showIdleArea();
+  clearInterval(mr.timerId);
+  mr.timerId = setInterval(() => {
+    if (--left > 0) return;
+    clearInterval(mr.timerId);
+    const st = recGet().state;
+    if (st === "recording" || st === "last_10s" || st === "starting") {
+      recSend({ type: "TIMEOUT", at: Date.now() });
+    } else if (st !== "recognizing" && st !== "submitting" && st !== "confirming") {
+      mrSubmit(true);
+    }
+  }, 1000);
+}
+
+function mrSubmit(timeout) {
+  if (!mrActive || !mr || phase !== "answering") return;
+  phase = "typing";
+  clearInterval(mr.timerId);
+  $("mr-turn").classList.add("hidden");
+  const text = $("answer").value.trim();
+  const t = recGet().timings;
+  if (t.recordStartAt) mr.takes.push({ timings: Object.assign({}, t), transcript: text });
+  mr.answers.push(text);
+  mr.rows.push({ role: "user", text: text || "（没开口）" });
+  mrRenderLog();
+  mrSave();
+  recSend({ type: "SUBMITTED" });
+  showOnly(null);
+  $("answer").value = "";
+  $("input-bar").classList.add("hidden");
+  setTimeout(() => mr && mrAdvance(), 700);
+}
+
+/* 下一轮：舞台提示用骨架，台词由 LLM 做一次措辞变奏（失败→骨架原文） */
+async function mrAdvance() {
+  const next = mr.roundIdx + 1;
+  const rd = mr.data.rounds[next];
+  if (!rd) { mrFinish(); return; }
+  const hint = (mr.data.stage_hints || {})[String(rd.round)];
+  if (hint) { mr.rows.push({ role: "stage", text: hint }); mrRenderLog(); }
+  let line = rd.line;
+  const cfg = getCfg();
+  if (cfg && cfg.key) {
+    try {
+      const v = await llmDirect(cfg, rd, mr.answers[mr.answers.length - 1]);
+      if (v) line = v;
+    } catch (e) { console.warn("导演变奏失败，用剧本原文：", e); }
+  }
+  if (!mr) return;
+  mrSave();
+  mrShowRound(next, line);
+}
+
+/* 多轮导演：保持原意/态度/立场，只随用户回答微调措辞；12 秒超时 */
+async function llmDirect(cfg, rd, userSaid) {
+  const spk = mr.data.speakers[rd.speaker];
+  const sys = `你在职场情景剧里扮演${spk.name}（${spk.title}，用户的${spk.relation}），接下一句台词。
+【场景】${mr.data.title}：${mr.data.review.setting}
+【刚才用户（小林）说】${userSaid || "（没开口）"}
+【剧本原句】${rd.line}
+要求：意思、态度、立场和剧本原句完全一致，但不能照抄原文——必须换措辞（换词或换语序），并顺着用户刚才的话接，比如点一下他话里的某个点再转到原句的意思。不得提前透露后面的剧情，不得脱离角色口吻，不超过40字。
+只输出 JSON：{"line":"..."}`;
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const res = await fetch(`${cfg.base.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.key}` },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages: [{ role: "system", content: sys }],
+        temperature: 0.4,
+        response_format: { type: "json_object" },
+      }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const p = JSON.parse(extractJson(data.choices?.[0]?.message?.content || ""));
+    return String(p.line || "").slice(0, 60);
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+/* 收场 → 复盘：拼全部回答走一次 llmScore，灌进 7.3 结果页 */
+async function mrFinish() {
+  if (!mr || mr.finishing) return;
+  mr.finishing = true;
+  clearInterval(mr.timerId);
+  mrCollapseCur();
+  await ensureReveals();
+  const rv = reveals["M1"] || {};
+  const d = mr.data;
+  cur = {
+    id: "M1", title: `${d.title} · 多轮`, tag: "多轮实战 · 5 轮",
+    setting: d.review.setting, brief: d.review.brief || [],
+    char_name: "周振华", char_title: "支行行长",
+    trigger_line: d.rounds[0].line, goal: d.review.goal,
+    subtext: rv.subtext || "", rubric: rv.rubric || null,
+    red_lines: rv.red_lines || [], strategies: rv.strategies || [],
+    reactions: rv.reactions || null, time_limit_s: 30, difficulty: 3,
+  };
+  curIdx = -1;
+  answers = mr.answers.slice();
+  voiceTakes = mr.takes.slice();
+  peerLines = [];
+  const full = answers.map((a, i) => `第${i + 1}轮：${a || "（未作答）"}`).join("\n");
+  const cfg = getCfg();
+  let r = null;
+  if (cfg && cfg.key) {
+    try { r = await llmScore(cfg, cur, full, false); }
+    catch (e) { console.warn("LLM 复盘失败，降级演示评分：", e); }
+  }
+  if (!r) r = localScore(cur, answers.join("\n"), false);
+  r.voice = voiceMetrics();
+  r.points_achieved = pointsAchieved(r);
+  clearMrSession();
+  mrActive = false;
+  mr = null;
+  $("battle-play").classList.add("hidden");
+  showOnly(null);
+  phase = "scoring";
+  showResult(r);
+}

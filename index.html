@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>入戏 · 职场情景对练</title>
-<link rel="stylesheet" href="style.css?v=29">
+<link rel="stylesheet" href="style.css?v=31">
 </head>
 <body>
 <div id="phone">
@@ -85,14 +85,15 @@
     </div>
   </section>
 
-  <!-- 实战（阶段二占位） -->
+  <!-- 实战 -->
   <section id="battle" class="hidden">
     <header><h2 class="page-title">实战</h2></header>
-    <div class="placeholder-card">
-      <b>多轮实战 · 阶段二开放</b>
-      <p>连续追问、你来我往的完整对局正在排期。现在先去「今日」练单轮——每幕 90 秒，一样长本事。</p>
-      <button id="battle-go" type="button">去练单轮 →</button>
-    </div>
+    <p class="mp-hint">5 轮连问、当众作答。进行中不亮分，结束一起复盘。</p>
+    <button id="battle-entry" type="button">
+      <div class="veil"></div>
+      <div class="txt"><b id="battle-entry-title">周一晨会：被当众问业绩</b><span id="battle-entry-sub">多轮实战 · 5 轮</span></div>
+      <div class="diff">★★★</div>
+    </button>
   </section>
 
   <!-- 成长 -->
@@ -126,6 +127,7 @@
     <div class="menu">
       <button id="me-settings">大模型设置<span>›</span></button>
       <button id="me-about">关于入戏<span>›</span></button>
+      <button id="me-admin">全部场景 · 管理入口<span>›</span></button>
       <button id="me-clear">清空练习记录<span>›</span></button>
       <button id="me-logout" class="danger">退出登录<span>›</span></button>
     </div>
@@ -177,6 +179,10 @@
       <img id="char" alt="">
       <div id="nameplate"><b id="char-name"></b><i></i><span id="char-title"></span></div>
       <div id="situation"></div>
+      <details id="brief-card">
+        <summary>📋 你手上的信息</summary>
+        <div id="brief-body"></div>
+      </details>
     </div>
 
     <div id="subtitle-band">
@@ -257,9 +263,54 @@
         </div>
       </div>
     </div>
+  </section>
 
-    <!-- 7.3 结果页（整页滚动） -->
-    <div id="result" class="hidden">
+  <!-- 7.4 多轮实战 -->
+  <section id="battle-play" class="hidden">
+    <div id="mr-stage">
+      <img id="mr-bg" alt="">
+      <div class="mr-veil"></div>
+      <div class="mr-spot"></div>
+      <img id="mr-char" alt="">
+      <div class="mr-fade"></div>
+    </div>
+
+    <header id="mr-head">
+      <button id="mr-exit" type="button" aria-label="退出（需二次确认）"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      <h1 id="mr-title"></h1>
+    </header>
+
+    <div id="mr-round"><b id="mr-round-n">第 1 / 5 轮</b><span class="mr-segs" id="mr-segs"><i></i><i></i><i></i><i></i><i></i></span></div>
+
+    <ul id="mr-present" aria-label="在场人物"></ul>
+
+    <div id="mr-speaker">
+      <div id="mr-plate"><b id="mr-spk-name"></b><i></i><span id="mr-spk-title"></span></div>
+      <span id="mr-speaking" class="hidden"><i class="b1"></i><i class="b2"></i><i class="b3"></i>说话中</span>
+    </div>
+
+    <div id="mr-log-wrap">
+      <div id="mr-log"></div>
+      <div class="mr-log-fade"></div>
+    </div>
+
+    <div id="mr-turn" class="hidden">轮到你 · 限时 <b id="mr-limit">30</b> 秒</div>
+  </section>
+
+  <!-- 实战退出二次确认 -->
+  <div id="mr-exit-gate" class="hidden">
+    <div id="mr-exit-card">
+      <h2>退出这场实战？</h2>
+      <p class="hint">进度会存在这台设备上，下次从今日页「继续实战」接着来。</p>
+      <div class="row">
+        <button id="mr-exit-cancel">接着练</button>
+        <button id="mr-exit-ok">退出并保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7.3 结果页（整页滚动；独立挂载，单轮/多轮复盘共用） -->
+  <div id="result" class="hidden">
       <div id="result-scroll">
         <header id="result-nav">
           <button id="btn-home" type="button" aria-label="返回今日页">‹</button>
@@ -274,6 +325,7 @@
         </div>
         <p id="one-comment"></p>
         <span class="ai-tag" id="comment-ai">AI 生成</span>
+        <p id="inner-voice"></p>
 
         <section class="r-card" id="rubric-card">
           <h3>评分要点 <span id="rubric-ach"></span></h3>
@@ -329,8 +381,7 @@
           <button id="btn-retry" type="button">再练一遍</button>
         </div>
       </div>
-    </div>
-  </section>
+  </div>
 
   <!-- 设置 -->
   <div id="settings" class="hidden">
@@ -347,6 +398,25 @@
     </div>
   </div>
 
+  <!-- 管理入口验证 -->
+  <div id="admin-gate" class="hidden">
+    <div id="admin-card">
+      <h2>管理入口</h2>
+      <p class="hint">全部场景列表只给维护用，普通练习用不到。输管理密码继续。</p>
+      <label>管理密码<input id="admin-code" type="password" placeholder="输密码" autocomplete="off"></label>
+      <p id="admin-err" class="hidden">密码不对，再试一次</p>
+      <div class="row">
+        <button id="admin-cancel">取消</button>
+        <button id="admin-ok">进入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 嘴替练习底栏（有匹配场景才出现） -->
+  <div id="mp-bar" class="hidden">
+    <button id="mp-practice" type="button"></button>
+  </div>
+
   <!-- 底部导航 -->
   <nav id="tabbar" class="hidden">
     <button data-tab="home" class="on"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg><span>今日</span></button>
@@ -358,6 +428,6 @@
 
 </div>
 <script src="config.js"></script>
-<script src="app.js?v=38"></script>
+<script src="app.js?v=40"></script>
 </body>
 </html>

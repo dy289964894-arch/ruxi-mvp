@@ -1,0 +1,39 @@
+{
+  "M1": {
+    "id": "M1",
+    "scenario_id": "fin_monday_meeting",
+    "title": "周一晨会：被当众问业绩",
+    "bg": "bg_meeting_9x16.jpg",
+    "total_rounds": 5,
+    "others_present_label": "等十余人",
+    "cameo": { "name": "小何", "title": "综合员", "line": "行长，人都到齐了。" },
+    "present_all": [
+      { "character_id": "zhou", "name": "周振华", "avatar": "zhou_avatar.png" },
+      { "character_id": "chen", "name": "陈敏", "avatar": "chen_avatar.png" },
+      { "character_id": "zhao", "name": "赵一鸣", "avatar": "zhao_avatar.png" }
+    ],
+    "speakers": {
+      "zhou": { "name": "周振华", "title": "支行行长", "relation": "隔级领导", "avatar": "zhou_avatar.png" },
+      "chen": { "name": "陈敏", "title": "公司业务部经理", "relation": "直属领导", "avatar": "chen_avatar.png" },
+      "zhao": { "name": "赵一鸣", "title": "客户经理", "relation": "同期", "avatar": "zhao_avatar.png" }
+    },
+    "rounds": [
+      { "round": 1, "speaker": "zhou", "expression": "严肃", "direction": "严肃，低头看报表", "img": "zhou_serious.png", "line": "小林，你上个月存款任务完成多少？", "expects_user_reply": true, "time_limit_s": 30 },
+      { "round": 2, "speaker": "zhou", "expression": "冷淡", "direction": "抬头，冷淡", "img": "zhou_serious.png", "img_is_substitute": true, "line": "代发？上个月例会你也是这么说的。", "expects_user_reply": true, "time_limit_s": 30 },
+      { "round": 3, "speaker": "zhao", "expression": "略带得意", "direction": "略带得意，插话", "img": "zhao_smug.png", "line": "行长，那家企业我之前也接触过，他们财务说今年不打算换代发银行。", "expects_user_reply": true, "time_limit_s": 30 },
+      { "round": 4, "speaker": "zhou", "expression": "皱眉", "direction": "皱眉，看着你", "img": "zhou_serious.png", "img_is_substitute": true, "line": "那你说，这个月能到多少？", "expects_user_reply": true, "time_limit_s": 30 },
+      { "round": 5, "speaker": "zhou", "expression": null, "direction": "合上报表", "img": "zhou_avatar.png", "line": "散会后来我办公室一趟。", "expects_user_reply": false, "ends_scene": true }
+    ],
+    "stage_hints": {
+      "2": "陈经理低头翻笔记本，没说话。",
+      "3": "会议室里有人小声笑了一下。"
+    },
+    "review": {
+      "setting": "周一晨会，全支行十几个人在场。周行长翻着报表，没抬头。",
+      "goal": "数字 + 计划 + 承诺，越短越好；需要支持的事，约到会后单独汇报",
+      "brief": [
+        { "label": "关系史", "text": "上个月例会上，你说过「代发客户月底能签」，结果没签成" }
+      ]
+    }
+  }
+}

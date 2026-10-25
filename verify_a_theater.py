@@ -50,7 +50,7 @@ with sync_playwright() as pw:
 
     # 1. 登录
     pg.goto(BASE, wait_until="networkidle")
-    pg.evaluate("localStorage.clear()")
+    pg.evaluate("localStorage.clear(); sessionStorage.clear()")
     pg.reload(wait_until="networkidle")
     pg.fill("#login-name", "小林")
     pg.click("#btn-login")
@@ -86,9 +86,36 @@ with sync_playwright() as pw:
     pg.click("#tabbar button[data-tab=home]")
     time.sleep(0.3)
 
-    # 1d. 已删除块在 DOM 中不存在
-    for sel in ["#brief-card", "#dims", "#rounds", "#inner-voice"]:
+    # 1d. 结构断言：恢复的块要在，删掉的块保持不在
+    check("DOM 有 #brief-card（作答页信息卡已恢复）", pg.locator("#brief-card").count() == 1)
+    check("DOM 有 #inner-voice（内心戏行已恢复）", pg.locator("#inner-voice").count() == 1)
+    for sel in ["#dims", "#rounds"]:
         check(f"DOM 无 {sel}", pg.locator(sel).count() == 0)
+
+    # 1e. 管理入口：默认无全部场景 → 我的 → 验证密码 → 出现 → 刷新仍在
+    check("默认无 #scene-list（管理员未解锁）", pg.locator("#scene-list").count() == 0)
+    pg.click("#tabbar button[data-tab=me]")
+    pg.click("#me-admin")
+    pg.wait_for_selector("#admin-gate:not(.hidden)", timeout=4000)
+    pg.screenshot(path=f"{OUT}/00-admin-gate.png")
+    pg.fill("#admin-code", "wrong")
+    pg.click("#admin-ok")
+    time.sleep(0.2)
+    check("密码错误提示（说人话）", pg.locator("#admin-err").is_visible()
+          and pg.locator("#admin-err").inner_text() == "密码不对，再试一次")
+    pg.fill("#admin-code", "ruxi2026")
+    pg.click("#admin-ok")
+    pg.wait_for_selector("#scene-list", timeout=4000)
+    time.sleep(0.4)
+    check("管理员解锁后出现全部场景", pg.locator(".scene-item").count() == 21,
+          f"实际 {pg.locator('.scene-item').count()} 条")
+    pg.screenshot(path=f"{OUT}/00-admin-unlocked.png")
+    pg.reload(wait_until="networkidle")
+    pg.wait_for_selector("#today-scenes .tsc", timeout=8000)
+    check("刷新后 sessionStorage 保持解锁", pg.locator("#scene-list").count() == 1)
+    pg.evaluate("document.getElementById('home').scrollTop = 99999")
+    time.sleep(0.4)
+    pg.screenshot(path=f"{OUT}/00-home-admin.png")
 
     # 真链路配置：本地代理
     pg.evaluate("localStorage.setItem('mvp_cfg', %s)" % json.dumps(json.dumps(REAL_CFG)))
@@ -104,6 +131,17 @@ with sync_playwright() as pw:
     pg.screenshot(path=f"{OUT}/02-play-idle.png")
     check("[3] 作答页 idle", pg.locator("#btn-big-mic").is_visible(),
           "字幕: " + pg.locator("#bubble").inner_text()[:20])
+    check("[3b] 作答页「你手上的信息」折叠卡", pg.locator("#brief-card").is_visible()
+          and "你手上的信息" in pg.locator("#brief-card summary").inner_text())
+    # brief 展开应暂停计时：展开前记时，展开 2s 后读数不变，收起后恢复
+    t0 = pg.locator("#timer").inner_text()
+    pg.click("#brief-card summary")
+    time.sleep(2.1)
+    t1 = pg.locator("#timer").inner_text()
+    pg.click("#brief-card summary")
+    time.sleep(1.3)
+    t2 = pg.locator("#timer").inner_text()
+    check("[3c] brief 展开暂停计时/收起恢复", t0 == t1 and t2 != t1, f"{t0} →(展开) {t1} →(收起) {t2}")
 
     # 4. 点大麦克风 → 录音（假麦）；ASR 未配置 → 失败态 → 打字代替
     pg.click("#btn-big-mic")
@@ -148,6 +186,8 @@ with sync_playwright() as pw:
     check("结果页头部带「今日 n/5」", bool(re.search(r"今日 \d/5", scene_line)), scene_line)
     check("结果页导航居中标题「单轮结果」+ 返回箭头",
           pg.locator("#result-nav b").inner_text() == "单轮结果" and pg.locator("#result-nav #btn-home").count() == 1)
+    iv = pg.locator("#inner-voice").inner_text()
+    check("结果页有内心戏行", len(iv) > 0, "对方心里话:" + iv[:20])
     n_rubric = pg.locator("#rubric-list li").count()
     n_note = pg.locator("#rubric-list .pt-note").count()
     check("评分要点渲染（带 ok/note 小字）", n_rubric >= 3, f"要点 {n_rubric} 条, 原因小字 {n_note} 条")
@@ -245,8 +285,10 @@ with sync_playwright() as pw:
           if pg.locator("#continue-card").is_visible() else "无")
     pg.screenshot(path=f"{OUT}/07-today-after.png")
 
-    # 10. 嘴替 demo（场景匹配路径）：3 chips + 重新输入行
+    # 10. 嘴替 demo（场景匹配路径）：3 chips + 重新输入行 + 结果区结构对齐 05
     pg.click("#tabbar button[data-tab=mouthpiece]")
+    time.sleep(0.3)
+    pg.screenshot(path=f"{OUT}/08a-mouthpiece-input.png")
     pg.fill("#mp-input", "这个方案今晚必须给我，做不完你自己看着办")
     pg.click("#mp-go")
     time.sleep(1.0)
@@ -256,8 +298,17 @@ with sync_playwright() as pw:
           " | ".join(pg.locator(".mp-chip").all_inner_texts()))
     check("[10] 「你遇到的」卡含重新输入 3 入口 + 遮挡提示",
           pg.locator(".mp-reinput button").count() == 3 and pg.locator(".mp-shot-hint").count() == 1)
+    check("[10] 「你遇到的」题注在卡外（结果区第一块）",
+          pg.locator(".mp-cap").count() == 1 and pg.locator(".mp-orig .cap").count() == 0
+          and pg.locator(".mp-cap").inner_text() == "你遇到的")
     check("[10] 识别 chips 题注", "识别出的情况" in (pg.locator(".mp-chips-cap").inner_text()
           if pg.locator(".mp-chips-cap").count() else ""))
+    check("[10] 关键提示金卡", pg.locator(".mp-tip").count() == 1
+          and "关键提示" in pg.locator(".mp-tip .cap").inner_text())
+    check("[10] 练习底栏红按钮", pg.locator("#mp-bar").is_visible()
+          and "用你的嘴练一遍" in pg.locator("#mp-practice").inner_text(),
+          pg.locator("#mp-practice").inner_text())
+    check("[10] 无 mp-match 附加行", pg.locator(".mp-match").count() == 0)
     fit_demo = pg.locator(".rp-fit").all_inner_texts()
     print("    demo 适合行:", fit_demo[:2])
 
@@ -298,6 +349,96 @@ with sync_playwright() as pw:
     except Exception as e:
         check("[11] 嘴替真链路", False, str(e)[:120])
         pg.screenshot(path=f"{OUT}/09-mouthpiece-fail.png")
+
+    # 12. 多轮实战（真链路 llmDirect 变奏 + 真复盘 llmScore）
+    pg.evaluate("localStorage.setItem('mvp_cfg', %s)" % json.dumps(json.dumps(REAL_CFG)))
+    pg.click("#tabbar button[data-tab=battle]")
+    time.sleep(0.3)
+    check("[12] 实战 tab 入口卡", pg.locator("#battle-entry").is_visible(),
+          pg.locator("#battle-entry-sub").inner_text())
+    pg.click("#battle-entry")
+    pg.wait_for_selector("#battle-play:not(.hidden)", timeout=8000)
+    pg.wait_for_function(
+        "() => document.querySelector('#mr-cur-card .mrl-line') && document.querySelector('#mr-cur-card .mrl-line').textContent.length > 5",
+        timeout=15000)
+    time.sleep(0.5)
+    pg.screenshot(path=f"{OUT}/10-mr-start.png")
+    check("[12] 开局台词 + 轮次指示 第1/5轮", pg.locator("#mr-round-n").inner_text() == "第 1 / 5 轮")
+    check("[12] 进行中结果页不亮分", not pg.locator("#result").is_visible()
+          and pg.locator("#battle-play #score").count() == 0)
+    check("[12] 在场人物栏(2人+等十余人) + 客串条目", pg.locator("#mr-present li").count() == 3
+          and pg.locator(".mrl-cameo").count() == 1)
+    pg.wait_for_selector("#idle-area:not(.hidden)", timeout=15000)
+    pg.click("#btn-type-instead")
+    pg.wait_for_selector("#input-bar:not(.hidden)", timeout=5000)
+    pg.fill("#answer", "行长，上个月完成 60%，新增 120 万。差距在一家企业代发没落地，周三我约了他们财务。")
+    before_direct = len(llm_resps)
+    pg.click("#btn-send")
+    pg.wait_for_function(
+        "() => document.getElementById('mr-round-n').textContent.includes('第 2')", timeout=30000)
+    pg.wait_for_function(
+        "() => document.querySelector('#mr-cur-card .mrl-line') && document.querySelector('#mr-cur-card .mrl-line').textContent.length > 3",
+        timeout=15000)
+    check("[12] 你的条目入记录 + 进入第 2 轮", pg.locator(".mrl .mrl-you").count() >= 1)
+    time.sleep(0.4)
+    pg.screenshot(path=f"{OUT}/11-mr-round2.png")
+    line2 = pg.locator("#mr-cur-card .mrl-line").inner_text()
+    print("    [导演] 骨架原文: 代发？上个月例会你也是这么说的。")
+    print("    [导演] LLM 变奏:", line2)
+    direct_json = None
+    for r in llm_resps[before_direct:]:
+        try:
+            c = r.json()["choices"][0]["message"]["content"]
+            if '"line"' in c:
+                direct_json = c
+                break
+        except Exception:
+            pass
+    check("[12] llmDirect 真返回", direct_json is not None, (direct_json or "")[:80])
+
+    # ✕ 退出二次确认 → 进度保留
+    pg.click("#mr-exit")
+    pg.wait_for_selector("#mr-exit-gate:not(.hidden)", timeout=4000)
+    pg.screenshot(path=f"{OUT}/12-mr-exit-gate.png")
+    pg.click("#mr-exit-ok")
+    pg.wait_for_selector("#home:not(.hidden)", timeout=5000)
+    time.sleep(0.4)
+    check("[12] 退出后今日页继续实战显示真实进度 1/5",
+          pg.locator("#continue-card").is_visible() and "进度 1/5" in pg.locator("#continue-sub").inner_text(),
+          pg.locator("#continue-sub").inner_text())
+    pg.screenshot(path=f"{OUT}/13-home-continue.png")
+
+    # 恢复 → 答完 2/3/4 轮 → 收场轮不等人答 → 复盘
+    pg.click("#continue-card")
+    pg.wait_for_selector("#battle-play:not(.hidden)", timeout=8000)
+    check("[12] 恢复回到第 2 轮", "第 2" in pg.locator("#mr-round-n").inner_text())
+    answers_rest = [
+        "是，上次我判断早了。这周三我约了他们财务当面敲定，月底前签下来。",
+        "一鸣的信息可能滞后，我周三刚联系过对方财务，他们还在评估。行长，这事我直接跟到底。",
+        "这个月保底 75%，冲刺 85%。代发签下补 50 万，另外还有两家在谈，周五前给您准数。",
+    ]
+    for ans in answers_rest:
+        pg.wait_for_selector("#idle-area:not(.hidden)", timeout=30000)
+        pg.click("#btn-type-instead")
+        pg.wait_for_selector("#input-bar:not(.hidden)", timeout=5000)
+        pg.fill("#answer", ans)
+        pg.click("#btn-send")
+    pg.wait_for_function(
+        "() => document.querySelector('.mrl-rn') && document.querySelector('.mrl-rn').textContent.includes('第 5')",
+        timeout=30000)
+    time.sleep(1.0)
+    pg.screenshot(path=f"{OUT}/13-mr-endline.png")
+    check("[12] 收场轮出现且无需作答（无录音区）", pg.locator("#idle-area:not(.hidden)").count() == 0)
+    pg.wait_for_selector("#result:not(.hidden)", timeout=60000)
+    time.sleep(0.8)
+    pg.screenshot(path=f"{OUT}/14-mr-review.png")
+    check("[12] 收场后进复盘页出分", pg.locator("#score").inner_text().strip() != "",
+          pg.locator("#score").inner_text())
+    check("[12] 复盘标题带「· 多轮」", "多轮" in pg.locator("#result-scene").inner_text(),
+          pg.locator("#result-scene").inner_text())
+    check("[12] 复盘后 session 已清除",
+          pg.evaluate("localStorage.getItem('ruxi_mr_session')") is None)
+    check("[12] 复盘潜台词卡有数据（M1 reveals）", pg.locator("#subtext-card").is_visible())
 
     br.close()
 
